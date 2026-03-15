@@ -285,7 +285,7 @@ Deno.serve(async (req) => {
       ? "\n\nSince this learner has a longer daily commitment, include a 'Go Deeper' section at the end with 2–3 curated resource suggestions (books, articles, courses, tools) relevant to the topic."
       : "";
 
-    const systemPrompt = `You are a world-class learning content generator for DailyProng, an AI career learning platform.
+    const systemPrompt = `You are a world-class learning content generator for ProngGSD, an AI career learning platform.
 
 PILLAR: ${pillarName}
 ${pillarDesc ? `Description: ${pillarDesc}` : ""}

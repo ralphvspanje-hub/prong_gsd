@@ -38,7 +38,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
         <div className="container flex h-14 items-center justify-between">
           <Link to="/dashboard" className="flex items-center gap-2">
             <img src="/Fork.png" className="h-5 w-5" />
-            <span className="font-serif text-lg font-bold tracking-tight">DailyProng</span>
+            <span className="font-serif text-lg font-bold tracking-tight">ProngGSD</span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-1">
@@ -82,7 +82,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
 
       <footer className="border-t border-border py-4 text-center pb-20 md:pb-4">
         <Link to="/about" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-          About DailyProng
+          About ProngGSD
         </Link>
       </footer>
     </div>

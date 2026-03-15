@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useDemo } from "@/hooks/useDemo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { Zap, Eye } from "lucide-react";
+import { Zap } from "lucide-react";
 import { toast } from "sonner";
 
 const Auth = () => {
@@ -15,7 +13,6 @@ const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { enableDemo } = useDemo();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,11 +29,6 @@ const Auth = () => {
     setLoading(false);
   };
 
-  const handleDemoMode = () => {
-    enableDemo();
-    navigate("/dashboard");
-  };
-
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="flex flex-col md:flex-row rounded-2xl border border-border overflow-hidden shadow-lg w-full max-w-5xl" style={{ background: 'rgba(20, 21, 26, 0.8)', backdropFilter: 'blur(10px)' }}>
@@ -47,7 +39,7 @@ const Auth = () => {
                 <div className="flex justify-center mb-3">
                   <Zap className="h-8 w-8 text-accent" />
                 </div>
-                <h1 className="font-serif text-2xl font-bold text-foreground">DailyProng</h1>
+                <h1 className="font-serif text-2xl font-bold text-foreground">ProngGSD</h1>
                 <p className="text-sm text-muted-foreground mt-1">
                   {isLogin ? "Sign in to your learning engine" : "Create your account"}
                 </p>
@@ -69,14 +61,7 @@ const Auth = () => {
                 <button onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors">
                   {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
                 </button>
-                <div className="relative">
-                  <Separator />
-                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">or</span>
-                </div>
-                <Button variant="outline" className="w-full gap-2" onClick={handleDemoMode}>
-                  <Eye className="h-4 w-4" />
-                  Explore Demo
-                </Button>
+                {/* Demo mode hidden — old unit flow replaced by ProngGSD task tracker */}
               </div>
             </div>
           </Card>

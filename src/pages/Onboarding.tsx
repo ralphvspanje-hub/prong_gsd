@@ -90,7 +90,7 @@ const Onboarding = () => {
   const startConversation = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("onboarding-chat", {
+      const { data, error } = await supabase.functions.invoke("gsd-onboarding-chat", {
         body: { messages: [], action: "start" },
       });
       if (error) {
@@ -129,7 +129,7 @@ const Onboarding = () => {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("onboarding-chat", {
+      const { data, error } = await supabase.functions.invoke("gsd-onboarding-chat", {
         body: { messages: newMessages, action: "continue" },
       });
       if (error) {
@@ -222,7 +222,7 @@ const Onboarding = () => {
       <header className="border-b border-border bg-background/80 backdrop-blur-sm">
         <div className="container flex h-14 items-center gap-2">
           <Zap className="h-5 w-5 text-accent" />
-          <span className="font-serif text-lg font-bold">DailyProng Setup</span>
+          <span className="font-serif text-lg font-bold">ProngGSD Setup</span>
         </div>
       </header>
 

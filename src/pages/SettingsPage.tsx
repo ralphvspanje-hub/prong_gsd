@@ -127,7 +127,7 @@ const SettingsPage = () => {
     setResetting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const { error } = await supabase.functions.invoke("reset-user-data", {
+      const { error } = await supabase.functions.invoke("gsd-reset-user-data", {
         body: { mode: "full" },
         headers: { Authorization: `Bearer ${session?.access_token}` },
       });
@@ -145,7 +145,7 @@ const SettingsPage = () => {
     setResetting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const { error } = await supabase.functions.invoke("reset-user-data", {
+      const { error } = await supabase.functions.invoke("gsd-reset-user-data", {
         body: { mode: "rewind" },
         headers: { Authorization: `Bearer ${session?.access_token}` },
       });
@@ -163,7 +163,7 @@ const SettingsPage = () => {
     setResetting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const { error } = await supabase.functions.invoke("reset-user-data", {
+      const { error } = await supabase.functions.invoke("gsd-reset-user-data", {
         body: { mode: "delete_account" },
         headers: { Authorization: `Bearer ${session?.access_token}` },
       });

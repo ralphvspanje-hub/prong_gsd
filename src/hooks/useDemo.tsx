@@ -94,5 +94,5 @@ export const DEMO_PROFILE = {
 };
 
 export const DEMO_MENTOR_MESSAGES = [
-  { id: "m1", role: "assistant", content: "Hey Alex! I'm Sage, your DailyProng mentor. I know your pillars, your progress, and where you're headed. What's on your mind today?", created_at: "2026-02-10T10:00:00Z" },
+  { id: "m1", role: "assistant", content: "Hey Alex! I'm Sage, your ProngGSD mentor. I know your pillars, your progress, and where you're headed. What's on your mind today?", created_at: "2026-02-10T10:00:00Z" },
 ];

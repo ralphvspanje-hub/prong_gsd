@@ -130,7 +130,7 @@ const Mentor = () => {
         content: messageText,
       });
 
-      const { data, error } = await supabase.functions.invoke("mentor-chat", {
+      const { data, error } = await supabase.functions.invoke("gsd-mentor-chat", {
         body: { message: messageText },
       });
       if (error) {
@@ -170,7 +170,7 @@ const Mentor = () => {
         return;
       }
 
-      const { error } = await supabase.functions.invoke("apply-mentor-changes", {
+      const { error } = await supabase.functions.invoke("gsd-apply-mentor-changes", {
         body: changes,
       });
       if (error) {

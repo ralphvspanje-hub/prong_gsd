@@ -59,7 +59,7 @@ export const UnitGenerationProvider = ({ children }: { children: ReactNode }) =>
 
       (async () => {
         try {
-          const { data, error } = await supabase.functions.invoke("generate-unit", { body });
+          const { data, error } = await supabase.functions.invoke("gsd-generate-plan", { body });
           if (error) {
             let msg = error.message;
             try {

@@ -1,8 +1,14 @@
-# Agent Log — DailyProng Web
+# Agent Log — ProngGSD
 
 This file tracks confusions, mistakes, and improvements made by agents working on this codebase.
 When you encounter something wrong or unclear in any CLAUDE.md or in the code itself, add an entry here.
 If you resolved it, also update the relevant CLAUDE.md immediately and mark this entry as Fixed.
+
+## 2026-03-15 — Step 0 + Phase 1: ProngGSD Foundation
+**What was confusing / wrong:** Several CLAUDE.md files referenced old edge function names (mentor-chat, generate-unit, etc.), old localStorage key prefix (dailyprong-), and described the Dashboard as the daily unit learning flow. The `supabase/CLAUDE.md` structure diagram listed old function directory names.
+**File/folder affected:** `CLAUDE.md`, `supabase/CLAUDE.md`, `src/hooks/CLAUDE.md`, `src/pages/CLAUDE.md`
+**What I did:** Updated all four CLAUDE.md files to reflect: gsd- prefixed edge function names, pronggsd- localStorage prefix, placeholder Dashboard, hidden demo mode, new ProngGSD tables, and new user_profile columns. Also renamed AGENT_LOG header from "DailyProng Web" to "ProngGSD".
+**Status:** Fixed
 
 ## 2026-03-14 — RAL-75 — No issues found
 

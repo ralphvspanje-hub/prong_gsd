@@ -4,8 +4,8 @@
 
 | File | Route | Guard | Purpose |
 |------|-------|-------|---------|
-| Auth.tsx | `/auth` | AuthRoute | Login/signup form + "Explore Demo" button |
-| Dashboard.tsx | `/dashboard` | ProtectedRoute | Today's unit, pillar selection, feedback, next section, bonus unit |
+| Auth.tsx | `/auth` | AuthRoute | Login/signup form (demo entry hidden) |
+| Dashboard.tsx | `/dashboard` | ProtectedRoute | Placeholder — "ProngGSD — Coming soon" (old unit flow stripped) |
 | Onboarding.tsx | `/onboarding` | ProtectedRoute | AI onboarding chat → blueprint review → confirm |
 | Progress.tsx | `/progress` | ProtectedRoute | Pillar levels, difficulty trajectories, recent cycles |
 | History.tsx | `/history` | ProtectedRoute | Past units with search + pillar/type filters |
