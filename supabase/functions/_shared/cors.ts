@@ -1,6 +1,6 @@
 const ALLOWED_ORIGINS = [
   "https://dailyprong-web.vercel.app",
-  "http://localhost:5173",
+  "http://localhost:8080",
 ];
 
 const ALLOW_HEADERS =

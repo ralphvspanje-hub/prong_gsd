@@ -6,75 +6,81 @@ Shared Deno modules imported by multiple edge functions.
 
 | Module | Export | Used by |
 |--------|--------|---------|
-| `rateLimit.ts` | `checkRateLimit` | mentor-chat, generate-unit, onboarding-chat |
+| `rateLimit.ts` | `checkRateLimit` | mentor-chat, generate-plan, onboarding-chat |
 | `cors.ts` | `getCorsHeaders` | all 6 functions |
 
 Rate limits: 50 calls/user/day (500 for owner via `OWNER_EMAIL` env var), 100 calls/IP/day per endpoint. Auto-cleans rows older than 48h from `api_rate_limits`.
 
 ## mentor-chat
 
-AI mentor conversation endpoint.
+AI mentor conversation endpoint. Phase 6 updated to be plan-aware.
 
 - **Auth**: Bearer JWT → `supabase.auth.getUser()` for user ID
 - **Rate limits**: 50 calls/user/day, 100 calls/IP/day via `api_rate_limits` table. Old rows (>48h) auto-cleaned.
-- **Context loaded**: user_profile, active pillars, active phase, last 3 cycles, last 30 conversation messages
+- **Context loaded** (two rounds):
+  - Round 1 (parallel): user_profile, active pillars, active phase, last 3 cycles, active learning_plan, user_progress
+  - Round 2: plan_blocks for active plan, plan_tasks for current week's uncompleted blocks, last 30 conversation messages
 - **AI model**: `gemini-3.1-flash-lite` via Google Generative AI REST API
 - **Env vars**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`
-- **Settings**: max_tokens 2048, temperature 0.7
+- **Settings**: max_tokens 3072, temperature 0.7
 - **Message limit**: Max 2000 chars per user message
-- **PROPOSED_CHANGES format**: When the mentor proposes pillar changes, it appends a structured block at the end of its message:
+- **Pattern detection**: Server-side `detectPatterns()` analyzes last 5 checkin feedbacks for consecutive "too_hard"/"too_easy" ratings and streak breaks, injected as PATTERN ALERTS in system prompt
+- **System prompt sections**: USER PROFILE, ACTIVE PILLARS, CURRENT PHASE, RECENT CYCLES, ACTIVE PLAN (outline summary), CURRENT WEEK STATUS (per-block task counts), CURRENT TASK IDS (for swap_resource), PROGRESS (streak/day counter), RECENT CHECK-IN FEEDBACK, PATTERN ALERTS, BEHAVIOR RULES, PROPOSED_CHANGES FORMAT, AVAILABLE PILLAR IDS
+- **PROPOSED_CHANGES format**: Supports both single object and array of actions:
 
 ```
 PROPOSED_CHANGES
-{"action": "<action>", "changes": {<changes>}}
+[{"action": "<action>", "changes": {<changes>}}, ...]
 ```
 
-Actions: `add_pillar`, `delete_pillar`, `edit_pillar`, `swap_pillar`, `change_level`, `full_recalibration`
+Pillar actions: `add_pillar`, `delete_pillar`, `edit_pillar`, `swap_pillar`, `change_level`, `full_recalibration`
+Plan actions (Phase 6): `adjust_pacing`, `restructure_plan`, `swap_resource`, `regenerate_upcoming`
 
 ## apply-mentor-changes
 
-Applies pillar mutations proposed by the mentor.
+Applies pillar and plan mutations proposed by the mentor. Phase 6 added plan-aware actions and auto-cleanup on pillar changes.
 
 - **Auth**: Bearer JWT → `supabase.auth.getUser()` for user ID
 - **Env vars**: `SUPABASE_URL`, `SUPABASE_ANON_KEY` only (no admin client needed)
+- **Shared helpers**: `getActivePlan()`, `getCurrentWeek()`, `cleanupFutureBlocks()`, `updateOutlinePillar()`
 - **Actions**:
 
 | Action | What it does |
 |--------|-------------|
-| `add_pillar` | Insert pillar + topic clusters, auto-increment sort_order |
-| `delete_pillar` | Delete pillar + its topic_map + phase_weights |
+| `add_pillar` | Insert pillar + topic clusters, auto-increment sort_order. **Phase 6**: also adds pillar to future weeks in plan_outline and deletes uncompleted future blocks for regeneration |
+| `delete_pillar` | Delete pillar + its topic_map + phase_weights. **Phase 6**: also deletes pillar's uncompleted plan_blocks/tasks and removes from plan_outline |
 | `edit_pillar` | Update pillar fields. **Whitelist**: `name`, `description`, `why_it_matters`, `phase_weight` only |
-| `swap_pillar` | Delete one pillar, add another (combines delete + add logic) |
-| `change_level` | Set `current_level` on a pillar (clamped 1–5) |
+| `swap_pillar` | Delete one pillar, add another (combines enhanced delete + add). **Phase 6**: includes plan cleanup for both old and new pillar |
+| `change_level` | Set `current_level` on a pillar (clamped 1–5). Resets `blocks_completed_at_level` to 0 |
 | `full_recalibration` | Returns `{ redirect: "/onboarding" }` — no DB changes, client handles redirect |
+| `adjust_pacing` | Updates `user_profile.pacing_profile` + `learning_plans.pacing_profile`. Validates: aggressive, steady, exploratory |
+| `restructure_plan` | Replaces future weeks in `plan_outline` JSONB, updates `total_weeks`, deletes uncompleted future blocks. Validates no past/current week modifications |
+| `swap_resource` | Updates a single uncompleted plan_task with new action/platform/resource. Whitelist: `action`, `platform`, `resource_type`, `url`, `search_query`, `why_text`, `estimated_time_minutes` |
+| `regenerate_upcoming` | Deletes all uncompleted blocks after current week (and their tasks). Dashboard regenerates on-demand via normal flow |
 
-## generate-unit
+## generate-plan
 
-Generates AI learning units for a cycle. Supports 5 actions.
+Generates multi-week learning plans, individual plan blocks, and plan extensions. Three modes. Rewrites the old generate-unit logic (Phase 3), with difficulty adjustment added in Phase 5.
 
 - **Auth**: Bearer JWT → `supabase.auth.getUser()` for user ID
-- **Rate limits**: 50 calls/user/day, 100 calls/IP/day via `api_rate_limits` table. Skipped for calls carrying `X-Background-Token` matching `INTERNAL_BACKGROUND_SECRET` (legacy; no server-side cascade currently fires these).
-- **Duplicate guard**: For `next_section`, checks for a non-bonus `is_pending_feedback` unit in the cycle. When `current_section_number` is provided (pre-gen path), only matches units with `section_number > current_section_number` — this prevents the currently-displayed unit from short-circuiting the pre-gen. When absent (manual "Next Section" path), matches any pending non-bonus unit.
-- **Pre-gen triggered by client**: Dashboard.tsx fires a silent `next_section` call with `current_section_number` when a unit is displayed. The duplicate guard prevents wasted AI calls if the next unit already exists. No server-side cascade.
+- **Rate limits**: 50 calls/user/day, 100 calls/IP/day via `api_rate_limits` table. Skipped for calls carrying `X-Background-Token` matching `INTERNAL_BACKGROUND_SECRET`.
 - **Env vars**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`, `INTERNAL_BACKGROUND_SECRET`
 - **AI model**: `gemini-3.1-flash-lite` via Google Generative AI REST API
-- **Token budget**: Scales with `daily_time_commitment` from user_profile: 5min→800, 10min→1200, 15min→1800, 30min→3000, 45min→4000, 60min→5000. For 45–60 min, a "Go Deeper" resource section is appended.
-- **Section sequence**: `concept → deep_dive → case_study → hands_on → synthesis`. For cycle_length ≠ 5, the middle types repeat/truncate while concept stays first and synthesis stays last.
-- **Section numbering**: Supplemental units (`bonus`, `repeat_section`, `extra_resources`, `cycle_recap`) use `current_section_number` from the client (falls back to `mainUnitsCount` if absent). Main units (`new_cycle`, `next_section`) get `mainUnitsCount + 1`.
-- **`unit_role` column**: Persisted alongside `is_bonus`. Maps from action: `new_cycle`/`next_section` → `"normal"`, `bonus` → `"bonus"`, `repeat_section` → `"repeat"`, `extra_resources` → `"extra_resources"`, `cycle_recap` → `"cycle_recap"`. Used by the UI for badge labels.
-- **`last_section_topic`**: Optional string from client. When provided for `bonus`, focuses the bonus unit on that topic. When provided for `extra_resources`, narrows the resource suggestions to that specific topic instead of the whole cycle. Sent by the Dashboard when `activeCycle` is present.
+- **Token budget**: Outline mode uses 4000 tokens. Block mode scales with `time_commitment` using same TOKEN_BUDGET tiers as before (15min→1800, 30→3000, 60+→5000), adjusted per pillar based on active pillar count.
+- **JSON parsing**: Strips markdown code fences, extracts JSON between `{...}`. Retries once with stricter prompt on parse failure.
 
-| Action | Input | DB Operations |
-|--------|-------|---------------|
-| `new_cycle` | `{ pillar_id, action }` | Auto-skip any stale active cycle → pick next queued cluster → create cycle row → mark cluster `in_progress` → generate concept unit → save |
-| `next_section` | `{ cycle_id, action }` | Read existing units → determine next section type in sequence → generate → save |
-| `bonus` | `{ cycle_id, action }` | AI picks section type → generate different-angle content → save with `is_bonus: true` |
-| `repeat_section` | `{ cycle_id, action, section_type }` | Generate same section type with new content → save with `is_bonus: true` |
-| `extra_resources` | `{ cycle_id, action }` | Generate cycle summary + YouTube search suggestions + practice resource recommendations → save with `is_bonus: true` |
-| `cycle_recap` | `{ cycle_id, action }` | Generate structured section-by-section recap of completed cycle using all existing units as context → save with `section_type: "synthesis"`, `unit_role: "cycle_recap"`, `is_bonus: true` |
+| Mode | Input | What it does |
+|------|-------|-------------|
+| `full_plan` | `{ mode: "full_plan" }` | Fetches user profile, pillars, phases, topic maps → Gemini generates multi-week outline → stores in `learning_plans` → generates week 1 plan blocks for each active pillar → initializes `user_progress`. Returns `{ success, plan_id, total_weeks, warnings? }` |
+| `plan_block` | `{ mode: "plan_block", plan_id, week_number, pillar_id, weekly_goal, active_pillar_count?, difficulty_adjustment?, feedback_context? }` | Fetches pillar context, curated resources (keyword-matched), previous blocks → Gemini generates detailed block with tasks → stores in `plan_blocks` + `plan_tasks`. Optional `difficulty_adjustment` ("harder"/"easier"/"same") and `feedback_context` (user feedback string) are injected into the AI prompt to adapt difficulty. Returns `{ success, block_id }` |
+| `extend_plan` | `{ mode: "extend_plan", plan_id, additional_weeks }` | Fetches existing plan outline + completed blocks with feedback → Gemini generates additional week outlines continuing from where the user left off → appends to `plan_outline`, updates `total_weeks` → generates first new week's blocks. Returns `{ success, new_total_weeks }` |
 
-- **Cycle number**: Count all user's cycles + 1
-- **Returns**: `{ success, unit_id, section_type, topic }`
+- **Resource matching**: Static keyword map from pillar name → `curated_resources.skill_area` values, filtered by level. Falls back to AI-generated search queries when no curated resources match.
+- **Level 1 primers**: When pillar level is 1, context_brief includes setup instructions based on `user_profile.tool_setup` flags.
+- **New pillar intros**: First block for any pillar includes a pillar introduction in context_brief.
+- **Pacing profiles**: aggressive (4-6 tasks, urgent tone), steady (3-4 tasks, encouraging), exploratory (2-3 tasks, relaxed). Time estimates split across active pillars.
+- **Re-onboarding**: Deactivates old active plan before creating new one.
+- **Triggered from**: `Onboarding.tsx` `handleConfirm()` (full_plan), `Dashboard.tsx` `handleCheckinSubmit()` (plan_block with difficulty params), `Dashboard.tsx` `handleExtendPlan()` (extend_plan).
 
 ## onboarding-chat
 
@@ -93,21 +99,28 @@ AI-guided onboarding conversation that discovers the user's career context and b
 | `start` | `{ action: "start", messages: [] }` | `{ message }` — opening greeting |
 | `continue` | `{ action: "continue", messages: [...] }` | `{ message }` or `{ message, outputs }` when complete |
 
-- **Completion detection**: AI wraps final output in `[ONBOARDING_COMPLETE]...[/ONBOARDING_COMPLETE]` block containing JSON with `{ pillars, phases, topicMap }`. Function parses it and returns `{ message, outputs }`.
+- **Completion detection**: AI wraps final output in `[ONBOARDING_COMPLETE]...[/ONBOARDING_COMPLETE]` block containing JSON with `{ pillars, phases, topicMap, pacing_profile, time_commitment, job_situation, job_timeline_weeks, tool_setup }`. Function parses it and returns `{ message, outputs }`.
 - **Soft cap**: After 10 user turns, system prompt hints AI to conclude.
-- **Output shape**: `outputs.pillars[]` has `name, description, why_it_matters, starting_level, key_topics`. `outputs.phases[]` has `name, timeline_start, timeline_end, goal, weights`. `outputs.topicMap[]` has `pillar, cluster_name, subtopics, difficulty_level`.
+- **Discovery dimensions**: Career identity, skill landscape, learning style, growth priorities, unique context, situation & urgency, practical context (time commitment, tool setup). Phase 2 added dimensions 6-7.
+- **Output shape**: `outputs.pillars[]` has `name, description, why_it_matters, starting_level, key_topics`. `outputs.phases[]` has `name, timeline_start, timeline_end, goal, weights`. `outputs.topicMap[]` has `pillar, cluster_name, subtopics, difficulty_level`. Phase 2 additions: `outputs.pacing_profile` (aggressive/steady/exploratory), `outputs.time_commitment`, `outputs.job_situation`, `outputs.job_timeline_weeks`, `outputs.tool_setup` (JSON with python_installed, github_familiar, has_ide, used_practice_platforms).
 
-## process-feedback
+## process-checkin
 
-Processes unit feedback to adjust pillar difficulty and detect cycle completion.
+Handles task completion analysis, streak tracking, pacing detection, pillar leveling, and plan progression. Rewrites the old unit-based process-feedback logic (Phase 5).
 
-- **Input**: `{ unit_id, pillar_id, difficulty, value }`
-- **Returns**: `{ success: true, level_changed: boolean }` — `level_changed` is `true` when feedback caused the pillar's `current_level` to change
-- **Two-consecutive-signals rule**: Only adjusts pillar level when the last two difficulty signals from the same pillar agree (e.g., two consecutive `too_easy` → level up, two consecutive `too_hard` → level down). Updates `pillars.current_level` (clamped 1–5) and `pillars.trend`.
-- **Cycle-end logic**: Triggers cycle completion when a non-bonus `synthesis`-type unit receives feedback. Archives the cycle (computes avg difficulty/value from all non-bonus units), marks the cycle `completed`, marks the associated topic_map cluster as `covered`, and creates a `progress_archive` entry.
-- **Level-down stale cleanup**: For non-bonus, non-synthesis units where `level_changed` is true, deletes any stale pending non-bonus units in the cycle (so the next generation uses the updated level).
-- **Pre-gen moved to client**: Pre-generation of the next section is triggered from Dashboard.tsx on unit display, not from this function. See Dashboard.tsx `useEffect` keyed on `pendingUnit?.id`.
-- **Env vars**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`
+- **Auth**: Bearer JWT → `supabase.auth.getUser()` for user ID
+- **Rate limits**: 200 calls/user/day (higher than standard 50 since task completions are frequent), 100 calls/IP/day
+- **Env vars**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OWNER_EMAIL`
+
+| Event type | Input | Returns |
+|------------|-------|---------|
+| `task_complete` | `{ event_type, task_id }` | `{ success, streak, pacing_note, block_auto_complete, block_id, gap_return }` |
+| `block_complete` | `{ event_type, block_id, difficulty?, note? }` | `{ success, level_up, difficulty_adjustment, feedback_context, plan_status, next_block, plan_complete_data, nearing_end }` |
+
+- **task_complete**: Verifies task is completed, updates streak authoritatively in `user_progress` (replaces frontend streak logic), detects pacing (ahead/behind based on days since block creation), checks if block is now fully complete.
+- **block_complete**: Marks block completed with `checkin_feedback`, handles pillar leveling (threshold-based with acceleration/deceleration from consecutive feedback), generates difficulty adjustment signal for next block, detects plan completion and near-end for exploratory plans.
+- **Pillar leveling thresholds** (configurable constants): L1→2: 2 blocks, L2→3: 2, L3→4: 3, L4→5: 3. Two consecutive "too_easy" → immediate level up. Two consecutive "too_hard" → prevent level up.
+- **Frontend integration**: `task_complete` is fire-and-forget (non-blocking). `block_complete` is awaited (response drives next-block generation and level-up toasts).
 
 ## reset-user-data
 

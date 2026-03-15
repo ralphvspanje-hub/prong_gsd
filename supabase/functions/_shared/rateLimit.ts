@@ -7,16 +7,17 @@ export async function checkRateLimit(
   supabaseAdmin: any,
   userId: string,
   ipAddress: string,
-  endpoint: string
+  endpoint: string,
+  userLimitOverride?: number,
 ): Promise<{ allowed: boolean; message?: string }> {
   const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   const ownerEmail = Deno.env.get("OWNER_EMAIL");
-  let userLimit = 50;
+  let userLimit = userLimitOverride ?? 50;
   if (ownerEmail) {
     const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
     if (authUser?.user?.email?.toLowerCase() === ownerEmail.toLowerCase()) {
-      userLimit = 500;
+      userLimit = Math.max(userLimit, 500);
     }
   }
 

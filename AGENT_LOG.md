@@ -4,6 +4,36 @@ This file tracks confusions, mistakes, and improvements made by agents working o
 When you encounter something wrong or unclear in any CLAUDE.md or in the code itself, add an entry here.
 If you resolved it, also update the relevant CLAUDE.md immediately and mark this entry as Fixed.
 
+## 2026-03-16 — Phase 8: Polish and Launch Prep
+**What was confusing / wrong:** (1) CLAUDE.md exploration report said Onboarding fires gsd-generate-plan as fire-and-forget — it actually awaits. The real issue was: on plan generation failure, Onboarding still navigated to Dashboard, which redirected to /context-upload, confusing the user. (2) `gsd-generate-plan` extend_plan mode used `gemini-2.0-flash-lite` while all other modes used `gemini-3.1-flash-lite-preview` — copy-paste bug. (3) CheckinModal close handler called `handleCheckinSubmit("", "")` — processing block completion with empty feedback. (4) Dashboard polling for blocks had no timeout — infinite spinner on silent generation failure. (5) CLAUDE.md routes table missing ContextUpload. (6) CLAUDE.md still referenced deleted files as "unused" rather than "deleted".
+**File/folder affected:** `supabase/functions/gsd-generate-plan/index.ts`, `src/pages/Dashboard.tsx`, `src/pages/Onboarding.tsx`, `src/pages/About.tsx`, `CLAUDE.md`, `src/pages/CLAUDE.md`, `src/components/CLAUDE.md`, `src/hooks/CLAUDE.md`
+**What I did:** (1) Fixed Onboarding to stay on page on plan generation failure. (2) Fixed extend_plan model to `gemini-3.1-flash-lite-preview`. (3) Fixed CheckinModal close to dismiss without submitting. (4) Added 30s poll timeout with retry button to Dashboard. (5) Rebranded About.tsx from DailyProng to ProngGSD. (6) Deleted dead code: UnitDisplay.tsx, NavLink.tsx, Index.tsx. (7) Seeded 37 new curated resources via migration. (8) Updated all CLAUDE.md files.
+**Status:** Fixed
+
+## 2026-03-15 — Phase 7: Progress and History
+**What was confusing / wrong:** (1) CLAUDE.md route descriptions for Progress and History still referenced legacy data (cycles, units). (2) Progress.tsx still imported demo hooks and fetched cycles/units. (3) History.tsx still queried units table with cycle joins. (4) Components CLAUDE.md had no docs for progress/ or history/ subfolders. (5) Common Gotchas section missing Phase 7 entries about Recharts usage, heatmap derivation, and History page data model change.
+**File/folder affected:** `CLAUDE.md`, `src/pages/CLAUDE.md`, `src/components/CLAUDE.md`, `src/pages/Progress.tsx`, `src/pages/History.tsx`
+**What I did:** Complete rewrite of both pages for plan-based data model. Created 6 new progress components (ProgressSummaryCards, ActivitySection, WeeklyCompletionChart, PillarLevelCards, PillarCompletionChart, PlanSummaryStrip) and 1 history component (BlockCard). Updated all three CLAUDE.md files: route descriptions, component docs, status line, 5 new gotchas.
+**Status:** Fixed
+
+## 2026-03-15 — Phase 6: Mentor Adaptation
+**What was confusing / wrong:** (1) CLAUDE.md status line said Phase 5 complete — now Phase 6. (2) `supabase/functions/CLAUDE.md` mentor-chat section said context loaded was "user_profile, active pillars, active phase, last 3 cycles" — now includes plan, blocks, tasks, progress. (3) mentor-chat max_tokens was documented as 2048, now 3072. (4) apply-mentor-changes only had 6 pillar actions documented — now has 10 actions (6 pillar + 4 plan). (5) Mentor.tsx route description didn't mention plan-awareness or multi-action support. (6) Common Gotchas section missing Phase 6 entries.
+**File/folder affected:** `CLAUDE.md`, `supabase/functions/CLAUDE.md`, `src/pages/CLAUDE.md`
+**What I did:** Updated all three CLAUDE.md files: status line, mentor-chat context/settings docs, apply-mentor-changes action table, Mentor.tsx route description, Common Gotchas. Added 7 new gotchas for Phase 6 behavior.
+**Status:** Fixed
+
+## 2026-03-15 — Phase 4: Daily Task UI
+**What was confusing / wrong:** (1) CLAUDE.md described Dashboard as "read-only plan outline" — now it's the three-layer task tracker. (2) `src/CLAUDE.md` listed `UnitGenerationProvider` in provider chain — removed in Phase 4. (3) `src/hooks/CLAUDE.md` documented `useUnitGeneration` — hook deleted. (4) Routes table missing `/plan` route. (5) Components CLAUDE.md missing `plan/` subfolder.
+**File/folder affected:** `CLAUDE.md`, `src/CLAUDE.md`, `src/hooks/CLAUDE.md`, `src/pages/CLAUDE.md`, `src/components/CLAUDE.md`
+**What I did:** Updated all five CLAUDE.md files: Dashboard description, provider chain, hooks table, routes table, components directory docs, gotchas section, app status line.
+**Status:** Fixed
+
+## 2026-03-15 — Phase 2: Onboarding Update + Settings
+**What was confusing / wrong:** (1) `supabase/functions/CLAUDE.md` onboarding-chat output shape only listed `pillars, phases, topicMap` — now includes Phase 2 fields. (2) Token budget doc referenced `daily_time_commitment` — now references `time_commitment` with fallback. (3) Settings page CLAUDE.md descriptions didn't mention LinkedIn/resume section.
+**File/folder affected:** `supabase/functions/CLAUDE.md`, `CLAUDE.md`, `src/pages/CLAUDE.md`
+**What I did:** Updated all three CLAUDE.md files: onboarding output shape, discovery dimensions, token budget source, settings page description, app status line.
+**Status:** Fixed
+
 ## 2026-03-15 — Step 0 + Phase 1: ProngGSD Foundation
 **What was confusing / wrong:** Several CLAUDE.md files referenced old edge function names (mentor-chat, generate-unit, etc.), old localStorage key prefix (dailyprong-), and described the Dashboard as the daily unit learning flow. The `supabase/CLAUDE.md` structure diagram listed old function directory names.
 **File/folder affected:** `CLAUDE.md`, `supabase/CLAUDE.md`, `src/hooks/CLAUDE.md`, `src/pages/CLAUDE.md`

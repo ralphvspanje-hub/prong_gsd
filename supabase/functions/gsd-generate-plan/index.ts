@@ -4,53 +4,81 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 
 let corsHeaders: Record<string, string> = {};
 
-const SECTION_SEQUENCE = ["concept", "deep_dive", "case_study", "hands_on", "synthesis"] as const;
-type SectionType = typeof SECTION_SEQUENCE[number];
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
-const MIDDLE_TYPES: SectionType[] = ["deep_dive", "case_study", "hands_on"];
+const TIME_COMMITMENT_MINUTES: Record<string, number> = {
+  "15_min_daily": 15,
+  "30_min_daily": 30,
+  "60_min_daily": 60,
+  "90_min_daily": 90,
+  "weekend_only": 120,
+};
 
 const TOKEN_BUDGET: Record<number, number> = {
-  5: 800, 10: 1200, 15: 1800, 30: 3000, 45: 4000, 60: 5000,
+  5: 800, 10: 1200, 15: 1800, 30: 3000, 45: 4000, 60: 5000, 90: 5000, 120: 5000,
 };
 
-const DIFFICULTY_GUIDANCE: Record<number, string> = {
-  1: "Beginner-friendly. Define all terms. Use simple analogies and step-by-step explanations.",
-  2: "Basics assumed. Some jargon is OK. Provide more depth than pure intro material.",
-  3: "Intermediate. Expects foundational knowledge. Moderate complexity, real examples.",
-  4: "Advanced. Assumes strong foundation. Complex scenarios, nuanced trade-offs.",
-  5: "Expert-level. Cutting-edge topics, research-informed, industry-leading practices.",
+const PACING_WEEKS: Record<string, [number, number]> = {
+  aggressive: [4, 8],
+  steady: [8, 12],
+  exploratory: [12, 16],
 };
 
-const SECTION_INSTRUCTIONS: Record<string, string> = {
-  concept: "Core Concepts — Explain the key ideas clearly with concrete examples. Build mental models the learner can rely on.",
-  deep_dive: "Deep Dive — Go deeper into the mechanics, technical details, or research behind the topic. Reference real frameworks or methodologies.",
-  case_study: "Case Study — Present a real-world scenario or example. Walk through the decisions made and analyze outcomes. Make it feel like a story.",
-  hands_on: "Hands-On Practice — Give the learner a practical exercise or actionable task they can do today. Include clear steps and expected results.",
-  synthesis: "Synthesis — Connect everything from this cycle together. Help the learner integrate these ideas with their broader skills and career goals. End with reflection questions.",
-  extra_resources: `Extra Resources — Generate a concise summary of what was covered in this cycle, then provide:
-1. A short (2–3 sentence) cycle summary highlighting the key themes and takeaways
-2. 5–7 YouTube search query suggestions the learner can paste into YouTube to find great videos on the topics covered (be specific and practical, not generic)
-3. 3–5 recommended practice sites, tools, or resources where the learner can apply what they learned (include URLs where possible)
-
-Format each section with clear markdown headings. Keep it actionable and directly tied to the pillar and topic cluster.`,
-  cycle_recap: `Cycle Recap — This is a structured summary of the entire completed cycle. Using the list of existing units as your source, produce:
-1. A section-by-section recap: for each unit in the cycle, write a concise 2–3 sentence summary of what was covered and the key insight
-2. Key Takeaways: 3–5 bullet points capturing the most important lessons across the whole cycle
-3. Synthesis Connections: How do the different sections connect to each other? What patterns or themes emerged? How does this cycle's learning fit into the learner's broader career goals?
-
-Format with clear markdown headings. Be specific — reference actual topics and insights from the units, not generic statements.`,
+const PACING_TASKS: Record<string, [number, number]> = {
+  aggressive: [4, 6],
+  steady: [3, 4],
+  exploratory: [2, 3],
 };
 
-function buildSectionSequence(cycleLength: number): string[] {
-  if (cycleLength <= 1) return ["concept"];
-  if (cycleLength === 2) return ["concept", "synthesis"];
-  const sequence: string[] = ["concept"];
-  const middleCount = cycleLength - 2;
-  for (let i = 0; i < middleCount; i++) {
-    sequence.push(MIDDLE_TYPES[i % MIDDLE_TYPES.length]);
+const PACING_TONE: Record<string, string> = {
+  aggressive: 'Direct and urgent. "You need this for interviews." Push for action.',
+  steady: 'Encouraging and milestone-focused. "Great progress — here\'s your next step."',
+  exploratory: 'Relaxed and curiosity-driven. "Explore this when you feel like it."',
+};
+
+// Maps pillar name keywords → curated_resources skill_area values
+const SKILL_AREA_MAP: Record<string, string[]> = {
+  sql: ["sql_basics", "sql_intermediate", "sql_advanced"],
+  python: ["python_basics", "python_data"],
+  interview: ["interview_technical", "interview_behavioral"],
+  data: ["python_data", "data_viz"],
+  visualization: ["data_viz"],
+  coding: ["general_coding"],
+  github: ["general_coding"],
+  programming: ["general_coding"],
+};
+
+// skill_area suffixes that imply level ranges
+const LEVEL_TIERS: Record<string, [number, number]> = {
+  _basics: [1, 2],
+  _intermediate: [2, 4],
+  _advanced: [3, 5],
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function buildDifficultyContext(params: BlockParams): string {
+  let ctx = "";
+  if (params.difficultyAdjustment === "harder") {
+    ctx += "\n\nDIFFICULTY ADJUSTMENT: The learner found the previous block too easy. Increase complexity, use more challenging exercises and intermediate/advanced resources.";
+  } else if (params.difficultyAdjustment === "easier") {
+    ctx += "\n\nDIFFICULTY ADJUSTMENT: The learner found the previous block too hard. Simplify tasks, add more scaffolding, include beginner-friendly resources and more explanation.";
   }
-  sequence.push("synthesis");
-  return sequence;
+  if (params.feedbackContext) {
+    ctx += `\n\nLEARNER FEEDBACK FROM LAST BLOCK: ${params.feedbackContext}`;
+  }
+  return ctx;
+}
+
+function parseTimeCommitment(profile: any): number {
+  if (profile?.time_commitment && TIME_COMMITMENT_MINUTES[profile.time_commitment]) {
+    return TIME_COMMITMENT_MINUTES[profile.time_commitment];
+  }
+  return profile?.daily_time_commitment || 20;
 }
 
 function getMaxTokens(dailyTime: number): number {
@@ -61,12 +89,741 @@ function getMaxTokens(dailyTime: number): number {
   return 5000;
 }
 
+function parseJSON(text: string): any {
+  let cleaned = text.trim();
+  // Strip markdown code fences
+  const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    cleaned = fenceMatch[1].trim();
+  }
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    // Try extracting from first { to last }
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start !== -1 && end > start) {
+      return JSON.parse(cleaned.slice(start, end + 1));
+    }
+    throw new Error("Failed to parse AI response as JSON");
+  }
+}
+
 function jsonRes(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Gemini API wrapper
+// ---------------------------------------------------------------------------
+
+async function callGemini(
+  geminiApiKey: string,
+  systemPrompt: string,
+  userPrompt: string,
+  maxTokens: number,
+): Promise<string> {
+  const aiResponse = await fetch(
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": geminiApiKey,
+      },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+        generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 },
+      }),
+    },
+  );
+
+  if (!aiResponse.ok) {
+    if (aiResponse.status === 429) {
+      throw Object.assign(
+        new Error("The AI service is temporarily unavailable due to high demand. Please try again in a few minutes."),
+        { status: 429 },
+      );
+    }
+    const errText = await aiResponse.text();
+    throw new Error(`AI API error: ${aiResponse.status} ${errText}`);
+  }
+
+  const aiData = await aiResponse.json();
+  return aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
+
+// ---------------------------------------------------------------------------
+// Resource matching
+// ---------------------------------------------------------------------------
+
+function mapSkillAreas(pillarName: string, pillarLevel: number): string[] {
+  const words = pillarName.toLowerCase().split(/[\s\-_,&]+/);
+  const allAreas = new Set<string>();
+
+  for (const word of words) {
+    const mapped = SKILL_AREA_MAP[word];
+    if (mapped) mapped.forEach((a) => allAreas.add(a));
+  }
+
+  if (allAreas.size === 0) return [];
+
+  // Filter by level tier
+  return [...allAreas].filter((area) => {
+    for (const [suffix, [min, max]] of Object.entries(LEVEL_TIERS)) {
+      if (area.endsWith(suffix)) {
+        return pillarLevel >= min && pillarLevel <= max;
+      }
+    }
+    // Non-tiered areas always included
+    return true;
+  });
+}
+
+async function fetchResourcesForPillar(
+  supabaseAdmin: any,
+  pillarName: string,
+  pillarLevel: number,
+): Promise<any[]> {
+  const skillAreas = mapSkillAreas(pillarName, pillarLevel);
+  if (skillAreas.length === 0) return [];
+
+  const { data, error } = await supabaseAdmin
+    .from("curated_resources")
+    .select("*")
+    .in("skill_area", skillAreas)
+    .lte("min_level", pillarLevel)
+    .gte("max_level", pillarLevel);
+
+  if (error) {
+    console.error("Error fetching curated resources:", error);
+    return [];
+  }
+  return data || [];
+}
+
+// ---------------------------------------------------------------------------
+// Match pillar names from AI output back to actual pillar IDs
+// ---------------------------------------------------------------------------
+
+function matchPillarByName(aiName: string, pillars: any[]): any | null {
+  const normalized = aiName.toLowerCase().trim();
+  // Exact match first
+  const exact = pillars.find((p) => p.name.toLowerCase().trim() === normalized);
+  if (exact) return exact;
+  // Substring match
+  const sub = pillars.find(
+    (p) =>
+      normalized.includes(p.name.toLowerCase().trim()) ||
+      p.name.toLowerCase().trim().includes(normalized),
+  );
+  return sub || null;
+}
+
+// ---------------------------------------------------------------------------
+// Full plan generation (outline + week 1 blocks)
+// ---------------------------------------------------------------------------
+
+async function generateOutline(
+  supabase: any,
+  supabaseAdmin: any,
+  userId: string,
+  geminiApiKey: string,
+): Promise<{ plan_id: string; total_weeks: number; warnings: string[] }> {
+  const warnings: string[] = [];
+
+  // Fetch all context
+  const [profileRes, pillarsRes, phasesRes] = await Promise.all([
+    supabase.from("user_profile").select("*").eq("user_id", userId).maybeSingle(),
+    supabase.from("pillars").select("*").eq("user_id", userId).eq("is_active", true).order("sort_order"),
+    supabase.from("phases").select("*").eq("user_id", userId).order("sort_order"),
+  ]);
+
+  const profile = profileRes.data;
+  const pillars = pillarsRes.data || [];
+  const phases = phasesRes.data || [];
+
+  if (pillars.length === 0) {
+    throw Object.assign(new Error("No pillars found. Complete onboarding first."), { status: 400 });
+  }
+
+  // Fetch topic maps for all pillars
+  const pillarIds = pillars.map((p: any) => p.id);
+  const { data: topicMaps } = await supabase
+    .from("topic_map")
+    .select("*")
+    .in("pillar_id", pillarIds)
+    .order("priority_order");
+
+  const pacingProfile = profile?.pacing_profile || "steady";
+  const dailyMinutes = parseTimeCommitment(profile);
+  const [minWeeks, maxWeeks] = PACING_WEEKS[pacingProfile] || [8, 12];
+
+  // Build pillar summaries for AI
+  const pillarSummaries = pillars.map((p: any) => {
+    const clusters = (topicMaps || []).filter((t: any) => t.pillar_id === p.id);
+    return `- ${p.name} (level ${p.current_level}/5): ${p.description || ""}
+    Topics: ${clusters.map((c: any) => `${c.cluster_name} [${c.subtopics?.join(", ") || ""}]`).join("; ")}`;
+  }).join("\n");
+
+  const phaseSummary = phases.length > 0
+    ? phases.map((ph: any) => `- ${ph.name}: ${ph.goal || ""} (${ph.timeline_start} to ${ph.timeline_end})`).join("\n")
+    : "No phases defined.";
+
+  // Build optional context
+  let extraContext = "";
+  if (profile?.resume_text) {
+    extraContext += `\n\nRESUME CONTEXT:\n${profile.resume_text.slice(0, 3000)}`;
+  }
+  if (profile?.linkedin_context) {
+    extraContext += `\n\nLINKEDIN CONTEXT:\n${profile.linkedin_context.slice(0, 3000)}`;
+  }
+
+  const jobContext = profile?.job_situation
+    ? `Job situation: ${profile.job_situation}${profile.job_timeline_weeks ? `, deadline in ${profile.job_timeline_weeks} weeks` : ""}`
+    : "";
+
+  const systemPrompt = `You are ProngGSD, an AI learning plan architect. Given the learner's profile, pillars, and topic map, generate a multi-week learning plan outline.
+
+LEARNER PROFILE:
+- Pacing: ${pacingProfile}
+- Time commitment: ${dailyMinutes} minutes/day
+- ${jobContext || "No specific job deadline."}
+
+PILLARS:
+${pillarSummaries}
+
+PHASES:
+${phaseSummary}
+${extraContext}
+
+PLAN STRUCTURE RULES:
+- Target ${minWeeks}–${maxWeeks} weeks total. Shorter if the user's goals are focused, longer if broad.
+- Start with the highest-priority pillar first. Do NOT activate all pillars in week 1.
+- Stagger pillar introductions — introduce new pillars every 2–3 weeks.
+- Each week should have 1–3 active pillars, not more.
+- Earlier weeks focus on foundational topics (lower difficulty clusters).
+- Use the topic clusters to decide what each week covers.
+- If the user has a deadline of N weeks, the plan must fit within N weeks.
+
+Respond with ONLY valid JSON, no markdown fences, no commentary:
+{
+  "total_weeks": <number>,
+  "weeks": [
+    {
+      "week_number": 1,
+      "pillars": [
+        {
+          "pillar_name": "exact pillar name",
+          "weekly_goal": "specific goal for this pillar this week",
+          "difficulty": 1
+        }
+      ]
+    }
+  ]
+}`;
+
+  const userPrompt = "Generate the learning plan outline for this learner.";
+
+  let rawText = await callGemini(geminiApiKey, systemPrompt, userPrompt, 4000);
+  let outline: any;
+  try {
+    outline = parseJSON(rawText);
+  } catch {
+    // Retry once with stricter instruction
+    rawText = await callGemini(
+      geminiApiKey,
+      systemPrompt + "\n\nCRITICAL: Respond with raw JSON only. No markdown, no commentary, no code fences.",
+      userPrompt,
+      4000,
+    );
+    outline = parseJSON(rawText);
+  }
+
+  // Validate and enrich with pillar IDs
+  if (!outline.total_weeks || !Array.isArray(outline.weeks)) {
+    throw new Error("AI returned invalid plan outline structure");
+  }
+
+  for (const week of outline.weeks) {
+    if (!Array.isArray(week.pillars)) continue;
+    for (const wp of week.pillars) {
+      const matched = matchPillarByName(wp.pillar_name, pillars);
+      if (matched) {
+        wp.pillar_id = matched.id;
+      } else {
+        warnings.push(`Week ${week.week_number}: pillar "${wp.pillar_name}" not found in DB, skipping.`);
+      }
+    }
+    // Remove unmatched pillars
+    week.pillars = week.pillars.filter((wp: any) => wp.pillar_id);
+  }
+
+  // Remove empty weeks
+  outline.weeks = outline.weeks.filter((w: any) => w.pillars && w.pillars.length > 0);
+  if (outline.weeks.length === 0) {
+    throw new Error("AI plan outline matched zero pillars to the user's actual pillars.");
+  }
+  outline.total_weeks = outline.weeks.length;
+
+  // Deactivate any existing active plan
+  await supabaseAdmin
+    .from("learning_plans")
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("is_active", true);
+
+  // Insert new plan
+  const { data: plan, error: planErr } = await supabaseAdmin
+    .from("learning_plans")
+    .insert({
+      user_id: userId,
+      total_weeks: outline.total_weeks,
+      pacing_profile: pacingProfile,
+      plan_outline: outline,
+      is_active: true,
+    })
+    .select()
+    .single();
+
+  if (planErr) throw planErr;
+
+  // Generate week 1 plan blocks
+  const week1 = outline.weeks.find((w: any) => w.week_number === 1) || outline.weeks[0];
+  const activePillarCount = week1.pillars.length;
+
+  for (const wp of week1.pillars) {
+    try {
+      await generateBlock(supabase, supabaseAdmin, geminiApiKey, {
+        userId,
+        planId: plan.id,
+        weekNumber: wp.week_number || 1,
+        pillarId: wp.pillar_id,
+        pillarName: wp.pillar_name,
+        weeklyGoal: wp.weekly_goal,
+        profile,
+        activePillarCount,
+      });
+    } catch (err: any) {
+      console.error(`Block gen failed for pillar ${wp.pillar_name}:`, err);
+      warnings.push(`Failed to generate week 1 block for "${wp.pillar_name}": ${err.message}`);
+    }
+  }
+
+  // Initialize user_progress (upsert)
+  const { data: existingProgress } = await supabaseAdmin
+    .from("user_progress")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existingProgress) {
+    await supabaseAdmin
+      .from("user_progress")
+      .update({ current_day: 1, current_streak: 0, total_tasks_completed: 0, updated_at: new Date().toISOString() })
+      .eq("id", existingProgress.id);
+  } else {
+    await supabaseAdmin
+      .from("user_progress")
+      .insert({ user_id: userId, current_day: 1, current_streak: 0, longest_streak: 0, total_tasks_completed: 0 });
+  }
+
+  return { plan_id: plan.id, total_weeks: outline.total_weeks, warnings };
+}
+
+// ---------------------------------------------------------------------------
+// Plan block generation (single week + pillar)
+// ---------------------------------------------------------------------------
+
+interface BlockParams {
+  userId: string;
+  planId: string;
+  weekNumber: number;
+  pillarId: string;
+  pillarName?: string;
+  weeklyGoal: string;
+  profile?: any;
+  activePillarCount?: number;
+  difficultyAdjustment?: "harder" | "easier" | "same";
+  feedbackContext?: string;
+}
+
+async function generateBlock(
+  supabase: any,
+  supabaseAdmin: any,
+  geminiApiKey: string,
+  params: BlockParams,
+): Promise<{ block_id: string }> {
+  const { userId, planId, weekNumber, pillarId, weeklyGoal } = params;
+
+  // Fetch context if not passed
+  const profile = params.profile ||
+    (await supabase.from("user_profile").select("*").eq("user_id", userId).maybeSingle()).data;
+
+  const { data: pillar } = await supabase.from("pillars").select("*").eq("id", pillarId).maybeSingle();
+  const pillarName = params.pillarName || pillar?.name || "Unknown";
+  const pillarLevel = pillar?.current_level || 1;
+
+  // Fetch topic map for this pillar
+  const { data: topicClusters } = await supabase
+    .from("topic_map")
+    .select("*")
+    .eq("pillar_id", pillarId)
+    .order("priority_order");
+
+  // Fetch curated resources
+  const resources = await fetchResourcesForPillar(supabaseAdmin, pillarName, pillarLevel);
+
+  // Fetch previous blocks for continuity
+  const { data: prevBlocks } = await supabase
+    .from("plan_blocks")
+    .select("title, weekly_goal, week_number")
+    .eq("plan_id", planId)
+    .eq("pillar_id", pillarId)
+    .order("week_number");
+
+  // Check if this is the first block for this pillar
+  const isFirstBlock = !prevBlocks || prevBlocks.length === 0;
+
+  const pacingProfile = profile?.pacing_profile || "steady";
+  const dailyMinutes = parseTimeCommitment(profile);
+  const activePillars = params.activePillarCount || 1;
+  const minutesForThisPillar = Math.round(dailyMinutes / activePillars);
+  const [minTasks, maxTasks] = PACING_TASKS[pacingProfile] || [3, 4];
+
+  // Build resource list for prompt
+  const resourceList = resources.length > 0
+    ? resources.map((r: any) =>
+        `- ${r.title} (${r.platform}, ${r.resource_type}): ${r.url}${r.description ? ` — ${r.description}` : ""}`
+      ).join("\n")
+    : "No curated resources available for this skill area. Generate search queries for all tasks.";
+
+  const prevBlocksSummary = prevBlocks && prevBlocks.length > 0
+    ? prevBlocks.map((b: any) => `- Week ${b.week_number}: ${b.title} — ${b.weekly_goal}`).join("\n")
+    : "First week for this pillar.";
+
+  // Build tool_setup context for level 1 primers
+  let setupContext = "";
+  if (pillarLevel === 1 && profile?.tool_setup) {
+    const ts = profile.tool_setup;
+    const items: string[] = [];
+    if (ts.python_installed === false) items.push("does NOT have Python installed");
+    if (ts.python_installed === true) items.push("has Python installed");
+    if (ts.github_familiar === false) items.push("is NOT familiar with GitHub");
+    if (ts.github_familiar === true) items.push("is familiar with GitHub");
+    if (ts.has_ide === false) items.push("does NOT have a code editor/IDE");
+    if (ts.has_ide === true) items.push("has a code editor/IDE");
+    if (ts.used_practice_platforms === false) items.push("has NOT used practice platforms like HackerRank");
+    if (ts.used_practice_platforms === true) items.push("has used practice platforms");
+    if (items.length > 0) {
+      setupContext = `\n\nSETUP CONTEXT: The learner ${items.join(", ")}. Include any necessary setup steps in the first tasks and in the context_brief.`;
+    }
+  }
+
+  // Build optional resume/linkedin context
+  let extraContext = "";
+  if (profile?.resume_text) {
+    extraContext += `\n\nRESUME CONTEXT (use to personalize):\n${profile.resume_text.slice(0, 2000)}`;
+  }
+  if (profile?.linkedin_context) {
+    extraContext += `\n\nLINKEDIN CONTEXT (use to personalize):\n${profile.linkedin_context.slice(0, 2000)}`;
+  }
+
+  const firstBlockInstruction = isFirstBlock
+    ? `\n\nThis is the learner's FIRST week with the "${pillarName}" pillar. In context_brief, include:
+- What this skill/pillar is about in plain language
+- Why it matters for their specific goals
+- Practical setup instructions if needed (based on their tool setup)
+- End with: "This primer is just context. The real learning happens when you start the tasks below."`
+    : "";
+
+  const systemPrompt = `You are ProngGSD, generating a detailed weekly plan block for a learner.
+
+LEARNER: ${pacingProfile} pacing, ${minutesForThisPillar} minutes/day for this pillar, level ${pillarLevel}/5
+PILLAR: ${pillarName} — ${pillar?.description || ""}
+WEEKLY GOAL: ${weeklyGoal}
+
+TOPIC CLUSTERS FOR THIS PILLAR:
+${(topicClusters || []).map((c: any) => `- ${c.cluster_name}: ${c.subtopics?.join(", ") || "no subtopics"} (difficulty ${c.difficulty_level})`).join("\n")}
+
+PREVIOUS WEEKS FOR THIS PILLAR:
+${prevBlocksSummary}
+
+AVAILABLE CURATED RESOURCES (use these URLs when they match):
+${resourceList}
+
+TONE: ${PACING_TONE[pacingProfile] || PACING_TONE.steady}
+${setupContext}${firstBlockInstruction}${extraContext}${buildDifficultyContext(params)}
+
+TASK RULES:
+- Generate ${minTasks}–${maxTasks} tasks.
+- Total estimated time should be ~${minutesForThisPillar * 5}–${minutesForThisPillar * 7} minutes for the week (${minutesForThisPillar} min/day).
+- Use curated resource URLs when they match. Set resource_type to "curated" and provide the url.
+- When no curated resource fits, set resource_type to "search_query", url to null, and provide a specific search_query.
+- Each task should be concrete and completable in one sitting.
+- Include a healthy mix: hands-on practice (exercises, challenges), reading (docs, articles), AND video content (YouTube lectures, talks, tutorials).
+- For conceptual, theory, or lecture-style tasks, generate YouTube-specific search queries (prefix with "youtube: "). E.g., "youtube: Stanford CS229 introduction to machine learning lecture" or "youtube: Andrej Karpathy LLM explained". Be specific — name known educators, universities, or channels when relevant to the topic.
+- For hands-on practice tasks, keep using platform-specific resources or general search queries.
+- The "why_text" should connect the task to their goals and explain the learning value.
+
+Respond with ONLY valid JSON, no markdown fences, no commentary:
+{
+  "title": "Block title",
+  "weekly_goal": "Refined weekly goal",
+  "context_brief": "2-4 sentence context for the learner",
+  "tasks": [
+    {
+      "task_order": 1,
+      "action": "Specific action description",
+      "platform": "Platform name",
+      "resource_type": "curated",
+      "url": "https://...",
+      "search_query": null,
+      "estimated_time_minutes": 30,
+      "why_text": "Why this task matters"
+    }
+  ],
+  "pacing_note": "Brief pacing context for the learner",
+  "completion_criteria": "How to know when this block is done"
+}`;
+
+  const userPrompt = `Generate the week ${weekNumber} plan block for the "${pillarName}" pillar with the goal: "${weeklyGoal}"`;
+
+  const maxTokens = getMaxTokens(minutesForThisPillar);
+
+  let rawText = await callGemini(geminiApiKey, systemPrompt, userPrompt, maxTokens);
+  let block: any;
+  try {
+    block = parseJSON(rawText);
+  } catch {
+    // Retry once
+    rawText = await callGemini(
+      geminiApiKey,
+      systemPrompt + "\n\nCRITICAL: Respond with raw JSON only. No markdown, no commentary, no code fences.",
+      userPrompt,
+      maxTokens,
+    );
+    block = parseJSON(rawText);
+  }
+
+  // Insert plan_block
+  const { data: savedBlock, error: blockErr } = await supabaseAdmin
+    .from("plan_blocks")
+    .insert({
+      user_id: userId,
+      plan_id: planId,
+      pillar_id: pillarId,
+      week_number: weekNumber,
+      title: block.title || `Week ${weekNumber} — ${pillarName}`,
+      weekly_goal: block.weekly_goal || weeklyGoal,
+      context_brief: block.context_brief || null,
+      pacing_note: block.pacing_note || null,
+      completion_criteria: block.completion_criteria || null,
+      is_completed: false,
+    })
+    .select()
+    .single();
+
+  if (blockErr) throw blockErr;
+
+  // Insert plan_tasks
+  const tasks = Array.isArray(block.tasks) ? block.tasks : [];
+  for (const task of tasks) {
+    const { error: taskErr } = await supabaseAdmin
+      .from("plan_tasks")
+      .insert({
+        plan_block_id: savedBlock.id,
+        user_id: userId,
+        task_order: task.task_order || 1,
+        action: task.action || "Complete the task",
+        platform: task.platform || "Google",
+        resource_type: task.resource_type === "curated" ? "curated" : "search_query",
+        url: task.resource_type === "curated" ? (task.url || null) : null,
+        search_query: task.resource_type === "search_query" ? (task.search_query || null) : null,
+        estimated_time_minutes: task.estimated_time_minutes || null,
+        why_text: task.why_text || null,
+        is_completed: false,
+      });
+
+    if (taskErr) {
+      console.error("Error inserting task:", taskErr);
+    }
+  }
+
+  return { block_id: savedBlock.id };
+}
+
+// ---------------------------------------------------------------------------
+// Plan extension (add more weeks to an exploratory plan)
+// ---------------------------------------------------------------------------
+
+async function extendPlan(
+  supabase: any,
+  supabaseAdmin: any,
+  geminiApiKey: string,
+  userId: string,
+  planId: string,
+  additionalWeeks: number,
+): Promise<{ new_total_weeks: number }> {
+  // Fetch existing plan
+  const { data: plan, error: planErr } = await supabase
+    .from("learning_plans")
+    .select("*")
+    .eq("id", planId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (planErr || !plan) {
+    throw Object.assign(new Error("Plan not found"), { status: 400 });
+  }
+
+  const outline = plan.plan_outline as any;
+  const existingWeeks = outline?.weeks || [];
+  const lastWeekNumber = existingWeeks.length > 0
+    ? Math.max(...existingWeeks.map((w: any) => w.week_number))
+    : 0;
+
+  // Fetch user profile and pillars
+  const { data: profile } = await supabase
+    .from("user_profile")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const { data: pillars } = await supabase
+    .from("pillars")
+    .select("id, name, current_level, description")
+    .eq("user_id", userId)
+    .eq("is_active", true);
+
+  // Fetch completed blocks with feedback for continuity
+  const { data: completedBlocks } = await supabase
+    .from("plan_blocks")
+    .select("pillar_id, week_number, title, weekly_goal, checkin_feedback")
+    .eq("plan_id", planId)
+    .eq("is_completed", true)
+    .order("week_number");
+
+  const completedSummary = (completedBlocks || [])
+    .map((b: any) => {
+      const feedback = b.checkin_feedback?.difficulty
+        ? ` (rated: ${b.checkin_feedback.difficulty})`
+        : "";
+      return `- Week ${b.week_number}: ${b.title}${feedback}`;
+    })
+    .join("\n");
+
+  const pillarList = (pillars || [])
+    .map((p: any) => `- ${p.name} (level ${p.current_level}/5): ${p.description || ""}`)
+    .join("\n");
+
+  const pacingProfile = profile?.pacing_profile || "exploratory";
+
+  // Call Gemini to generate additional week outlines
+  const prompt = `You are ProngGSD, extending a learning plan.
+
+The learner has completed ${lastWeekNumber} weeks. Generate ${additionalWeeks} MORE weeks continuing from week ${lastWeekNumber + 1}.
+
+PACING: ${pacingProfile}
+PILLARS:
+${pillarList}
+
+COMPLETED SO FAR:
+${completedSummary || "No blocks completed yet."}
+
+Generate a continuation that:
+- Advances the learner's skills based on their progress and feedback
+- Introduces more advanced topics for pillars where they've been rating "too_easy"
+- Reinforces areas where they rated "too_hard"
+- Maintains the same JSON structure as the existing plan outline
+
+Respond with ONLY valid JSON, no markdown fences:
+{
+  "weeks": [
+    {
+      "week_number": ${lastWeekNumber + 1},
+      "pillars": [
+        {
+          "pillar_name": "Pillar Name",
+          "weekly_goal": "What to accomplish this week",
+          "difficulty": 2
+        }
+      ]
+    }
+  ]
+}`;
+
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${geminiApiKey}`;
+  const geminiRes = await fetch(geminiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 3000, temperature: 0.7 },
+    }),
+  });
+
+  const geminiData = await geminiRes.json();
+  const rawText =
+    geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+  // Parse JSON (strip markdown fences if present)
+  const cleaned = rawText.replace(/```(?:json)?\s*/g, "").replace(/```\s*/g, "").trim();
+  let newWeeks: any[];
+  try {
+    const parsed = JSON.parse(cleaned);
+    newWeeks = parsed.weeks || [];
+  } catch {
+    throw Object.assign(new Error("Failed to parse AI response for plan extension"), { status: 500 });
+  }
+
+  // Append new weeks to outline
+  const updatedWeeks = [...existingWeeks, ...newWeeks];
+  const newTotalWeeks = plan.total_weeks + additionalWeeks;
+
+  await supabaseAdmin
+    .from("learning_plans")
+    .update({
+      plan_outline: { ...outline, total_weeks: newTotalWeeks, weeks: updatedWeeks },
+      total_weeks: newTotalWeeks,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", planId);
+
+  // Generate first new week's blocks
+  const firstNewWeek = newWeeks[0];
+  if (firstNewWeek) {
+    const activePillarCount = firstNewWeek.pillars?.length || 1;
+    for (const wp of firstNewWeek.pillars || []) {
+      const pillarId = (pillars || []).find(
+        (p: any) =>
+          p.name.toLowerCase().includes(wp.pillar_name.toLowerCase()) ||
+          wp.pillar_name.toLowerCase().includes(p.name.toLowerCase()),
+      )?.id;
+
+      if (!pillarId) continue;
+
+      await generateBlock(supabase, supabaseAdmin, geminiApiKey, {
+        userId,
+        planId,
+        weekNumber: firstNewWeek.week_number,
+        pillarId,
+        weeklyGoal: wp.weekly_goal,
+        activePillarCount,
+      });
+    }
+  }
+
+  return { new_total_weeks: newTotalWeeks };
+}
+
+// ---------------------------------------------------------------------------
+// Main handler
+// ---------------------------------------------------------------------------
 
 Deno.serve(async (req) => {
   corsHeaders = getCorsHeaders(req);
@@ -93,7 +850,7 @@ Deno.serve(async (req) => {
     });
 
     const { data: userData, error: userError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
+      authHeader.replace("Bearer ", ""),
     );
     if (userError || !userData?.user) {
       return jsonRes({ error: "Unauthorized" }, 401);
@@ -103,303 +860,63 @@ Deno.serve(async (req) => {
     if (!isBackgroundCall) {
       const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
       const ip = req.headers.get("x-forwarded-for") || "unknown";
-      const rateCheck = await checkRateLimit(supabaseAdmin, userId, ip, "generate-unit");
+      const rateCheck = await checkRateLimit(supabaseAdmin, userId, ip, "generate-plan");
       if (!rateCheck.allowed) {
         return jsonRes({ error: rateCheck.message }, 429);
       }
     }
 
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     const body = await req.json();
-    const { action, pillar_id, cycle_id, section_type, current_section_number, last_section_topic } = body;
+    const { mode } = body;
 
-    if (!["new_cycle", "next_section", "bonus", "repeat_section", "extra_resources", "cycle_recap"].includes(action)) {
-      return jsonRes({ error: "Invalid action" }, 400);
+    if (mode === "full_plan") {
+      const result = await generateOutline(supabase, supabaseAdmin, userId, geminiApiKey);
+      return jsonRes({
+        success: true,
+        plan_id: result.plan_id,
+        total_weeks: result.total_weeks,
+        warnings: result.warnings.length > 0 ? result.warnings : undefined,
+      });
     }
 
-    const { data: profile } = await supabase
-      .from("user_profile").select("*").eq("user_id", userId).maybeSingle();
-    const cycleLength = profile?.cycle_length || 5;
-    const dailyTime = profile?.daily_time_commitment || 20;
-    const maxTokens = getMaxTokens(dailyTime);
-    const includeGoDeeper = dailyTime >= 45;
-
-    let targetCycleId = cycle_id;
-    let pillar: any = null;
-    let cluster: any = null;
-    let targetSectionType: string;
-    let existingUnits: any[] = [];
-    let cycle: any = null;
-
-    if (action === "new_cycle") {
-      if (!pillar_id) return jsonRes({ error: "pillar_id required for new_cycle" }, 400);
-
-      const { data: activeCycle } = await supabase
-        .from("cycles").select("id").eq("user_id", userId).eq("status", "active").maybeSingle();
-      if (activeCycle) {
-        await supabase.from("cycles").update({ status: "skipped" }).eq("id", activeCycle.id);
+    if (mode === "plan_block") {
+      const { plan_id, week_number, pillar_id, weekly_goal, active_pillar_count,
+              difficulty_adjustment, feedback_context } = body;
+      if (!plan_id || !week_number || !pillar_id || !weekly_goal) {
+        return jsonRes({ error: "plan_id, week_number, pillar_id, and weekly_goal are required for plan_block mode" }, 400);
       }
-
-      const { data: pillarData } = await supabase
-        .from("pillars").select("*").eq("id", pillar_id).maybeSingle();
-      if (!pillarData) return jsonRes({ error: "Pillar not found" }, 404);
-      pillar = pillarData;
-
-      const { data: clusters } = await supabase
-        .from("topic_map").select("*")
-        .eq("pillar_id", pillar_id).eq("status", "queued")
-        .order("priority_order").limit(1);
-      if (!clusters?.length) {
-        return jsonRes({ error: "No queued topic clusters for this pillar" }, 400);
-      }
-      cluster = clusters[0];
-
-      const { count } = await supabase
-        .from("cycles")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId);
-      const cycleNumber = (count || 0) + 1;
-
-      const { data: newCycle, error: cycleErr } = await supabase
-        .from("cycles")
-        .insert({
-          user_id: userId, cycle_number: cycleNumber,
-          pillar_id, theme: cluster.cluster_name, status: "active",
-        })
-        .select().single();
-      if (cycleErr) throw cycleErr;
-      cycle = newCycle;
-      targetCycleId = newCycle.id;
-
-      await supabase.from("topic_map").update({ status: "in_progress" }).eq("id", cluster.id);
-      targetSectionType = "concept";
-    } else {
-      if (!cycle_id) return jsonRes({ error: "cycle_id required" }, 400);
-
-      const { data: cycleData } = await supabase
-        .from("cycles").select("*").eq("id", cycle_id).maybeSingle();
-      if (!cycleData) return jsonRes({ error: "Cycle not found" }, 404);
-      cycle = cycleData;
-
-      if (cycle.pillar_id) {
-        const { data: p } = await supabase
-          .from("pillars").select("*").eq("id", cycle.pillar_id).maybeSingle();
-        pillar = p;
-      }
-
-      if (pillar && cycle.theme) {
-        const { data: c } = await supabase
-          .from("topic_map").select("*")
-          .eq("pillar_id", pillar.id).eq("cluster_name", cycle.theme)
-          .maybeSingle();
-        cluster = c;
-      }
-
-      const { data: units } = await supabase
-        .from("units").select("*").eq("cycle_id", cycle_id).order("section_number");
-      existingUnits = units || [];
-
-      if (action === "next_section") {
-        const mainUnits = existingUnits.filter((u: any) => !u.is_bonus);
-        const sectionSeq = buildSectionSequence(cycleLength);
-        const nextIndex = mainUnits.length;
-        if (nextIndex >= sectionSeq.length) {
-          return jsonRes({ error: "Cycle complete — all sections generated." }, 400);
-        }
-        targetSectionType = sectionSeq[nextIndex];
-      } else if (action === "bonus") {
-        targetSectionType = "bonus";
-      } else if (action === "extra_resources") {
-        targetSectionType = "extra_resources";
-      } else if (action === "cycle_recap") {
-        targetSectionType = "cycle_recap";
-      } else {
-        if (!section_type || !SECTION_SEQUENCE.includes(section_type as SectionType)) {
-          return jsonRes({ error: "Valid section_type required for repeat_section" }, 400);
-        }
-        targetSectionType = section_type;
-      }
+      const result = await generateBlock(supabase, supabaseAdmin, geminiApiKey, {
+        userId,
+        planId: plan_id,
+        weekNumber: week_number,
+        pillarId: pillar_id,
+        weeklyGoal: weekly_goal,
+        activePillarCount: active_pillar_count || 1,
+        difficultyAdjustment: difficulty_adjustment,
+        feedbackContext: feedback_context,
+      });
+      return jsonRes({ success: true, block_id: result.block_id });
     }
 
-    if (action === "next_section") {
-      let guardQuery = supabase
-        .from("units")
-        .select("id, section_type, topic")
-        .eq("cycle_id", cycle_id)
-        .eq("is_pending_feedback", true)
-        .eq("is_bonus", false);
-
-      if (typeof current_section_number === "number") {
-        guardQuery = guardQuery.gt("section_number", current_section_number);
+    if (mode === "extend_plan") {
+      const { plan_id, additional_weeks } = body;
+      if (!plan_id || !additional_weeks) {
+        return jsonRes({ error: "plan_id and additional_weeks are required for extend_plan mode" }, 400);
       }
-
-      const { data: pendingNonBonus } = await guardQuery.limit(1);
-
-      if (pendingNonBonus && pendingNonBonus.length > 0) {
-        return jsonRes({
-          success: true,
-          unit_id: pendingNonBonus[0].id,
-          section_type: pendingNonBonus[0].section_type,
-          topic: pendingNonBonus[0].topic,
-        });
-      }
+      const result = await extendPlan(supabase, supabaseAdmin, geminiApiKey, userId, plan_id, additional_weeks);
+      return jsonRes({ success: true, new_total_weeks: result.new_total_weeks });
     }
 
-    const pillarName = pillar?.name || "General";
-    const pillarDesc = pillar?.description || "";
-    const pillarLevel = pillar?.current_level || 1;
-    const clusterName = cluster?.cluster_name || cycle?.theme || "General Topics";
-    const subtopics = cluster?.subtopics?.join(", ") || "";
-    const difficultyGuide = DIFFICULTY_GUIDANCE[pillarLevel] || DIFFICULTY_GUIDANCE[1];
-
-    const existingSummary = existingUnits.length > 0
-      ? existingUnits.map((u: any) =>
-          `- ${u.section_type}: "${u.topic}" (section ${u.section_number}${u.is_bonus ? ", bonus" : ""})`
-        ).join("\n")
-      : "No previous units in this cycle.";
-
-    let sectionInstruction: string;
-    if (action === "cycle_recap") {
-      sectionInstruction = SECTION_INSTRUCTIONS["cycle_recap"];
-    } else if (action === "extra_resources") {
-      let base = SECTION_INSTRUCTIONS["extra_resources"];
-      if (last_section_topic) {
-        base = base.replace(
-          "what was covered in this cycle",
-          `the topic "${last_section_topic}"`
-        ) + `\n\nFocus the summary, YouTube queries, and practice links specifically on "${last_section_topic}" rather than the whole cycle.`;
-      }
-      sectionInstruction = base;
-    } else if (action === "bonus") {
-      let base = `This is a BONUS unit. Pick the most fitting section type from: ${SECTION_SEQUENCE.join(", ")}. Approach the topic from a different angle than existing units. Start your response with [SECTION_TYPE: <chosen_type>] on its own line.`;
-      if (last_section_topic) {
-        base = `This is a BONUS unit. Focus on: "${last_section_topic}". Pick the most fitting section type from: ${SECTION_SEQUENCE.join(", ")}. Approach it from a different angle than existing units. Start your response with [SECTION_TYPE: <chosen_type>] on its own line.`;
-      }
-      sectionInstruction = base;
-    } else if (action === "repeat_section") {
-      sectionInstruction = `This is a REPEAT of the "${targetSectionType}" section type. Generate completely new content — do NOT reuse material from existing units. ${SECTION_INSTRUCTIONS[targetSectionType] || ""}`;
-    } else {
-      sectionInstruction = SECTION_INSTRUCTIONS[targetSectionType] || "";
-    }
-
-    const goDeeper = includeGoDeeper
-      ? "\n\nSince this learner has a longer daily commitment, include a 'Go Deeper' section at the end with 2–3 curated resource suggestions (books, articles, courses, tools) relevant to the topic."
-      : "";
-
-    const systemPrompt = `You are a world-class learning content generator for ProngGSD, an AI career learning platform.
-
-PILLAR: ${pillarName}
-${pillarDesc ? `Description: ${pillarDesc}` : ""}
-Pillar Level: ${pillarLevel}/5
-
-TOPIC CLUSTER: ${clusterName}
-${subtopics ? `Subtopics: ${subtopics}` : ""}
-
-DIFFICULTY CALIBRATION:
-${difficultyGuide}
-
-SECTION TYPE: ${targetSectionType === "bonus" ? "(AI chooses)" : targetSectionType === "cycle_recap" ? "Cycle Recap (synthesis)" : targetSectionType}
-${sectionInstruction}
-
-EXISTING UNITS IN THIS CYCLE:
-${existingSummary}
-
-CONTENT FORMAT:
-- Write in markdown
-- Start with a clear, engaging title (## heading)
-- Include concrete examples, not just theory
-- Keep it focused and actionable — no filler
-- Match the difficulty level to the pillar level
-- Reference the topic cluster's subtopics where relevant
-- Do NOT repeat content from existing units${goDeeper}
-
-Respond with ONLY the learning content. No meta-commentary.`;
-
-    const aiResponse = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": geminiApiKey,
-        },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents: [{
-            role: "user",
-            parts: [{
-              text: `Generate the ${targetSectionType === "bonus" ? "bonus" : targetSectionType} learning unit for "${clusterName}" in the ${pillarName} pillar.`,
-            }],
-          }],
-          generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 },
-        }),
-      }
-    );
-
-    if (!aiResponse.ok) {
-      if (aiResponse.status === 429) {
-        return jsonRes({ error: "The AI service is temporarily unavailable due to high demand. Please try again in a few minutes." }, 429);
-      }
-      const errText = await aiResponse.text();
-      throw new Error(`AI API error: ${aiResponse.status} ${errText}`);
-    }
-
-    const aiData = await aiResponse.json();
-    let content: string = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-    let finalSectionType = targetSectionType;
-    if (action === "cycle_recap") {
-      finalSectionType = "synthesis";
-    } else if (action === "bonus") {
-      const typeMatch = content.match(/\[SECTION_TYPE:\s*(\w+)\]/);
-      if (typeMatch && SECTION_SEQUENCE.includes(typeMatch[1] as SectionType)) {
-        finalSectionType = typeMatch[1];
-        content = content.replace(/\[SECTION_TYPE:\s*\w+\]\n?/, "").trim();
-      } else {
-        finalSectionType = "deep_dive";
-      }
-    }
-
-    const topicMatch = content.match(/^##\s+(.+)/m);
-    const topic = topicMatch ? topicMatch[1].trim() : clusterName;
-
-    const isSupplemental = ["bonus", "repeat_section", "extra_resources", "cycle_recap"].includes(action);
-    const mainUnitsCount = existingUnits.filter((u: any) => !u.is_bonus).length;
-    const sectionNumber = isSupplemental
-      ? (current_section_number ?? mainUnitsCount)
-      : mainUnitsCount + 1;
-
-    const ACTION_TO_ROLE: Record<string, string> = {
-      new_cycle: "normal", next_section: "normal",
-      bonus: "bonus", repeat_section: "repeat", extra_resources: "extra_resources",
-      cycle_recap: "cycle_recap",
-    };
-    const unitRole = ACTION_TO_ROLE[action] || "normal";
-
-    const { data: savedUnit, error: unitErr } = await supabase
-      .from("units")
-      .insert({
-        cycle_id: targetCycleId,
-        pillar_id: pillar?.id || null,
-        section_number: sectionNumber,
-        section_type: finalSectionType,
-        topic,
-        difficulty_level: pillarLevel,
-        content,
-        is_bonus: isSupplemental,
-        is_pending_feedback: true,
-        unit_role: unitRole,
-      })
-      .select().single();
-    if (unitErr) throw unitErr;
-
-    return jsonRes({
-      success: true,
-      unit_id: savedUnit.id,
-      section_type: finalSectionType,
-      topic,
-    });
+    return jsonRes({ error: "Invalid mode. Must be: full_plan, plan_block, extend_plan" }, 400);
   } catch (err: any) {
-    console.error(err); // full error + stack visible in Supabase function logs
+    console.error(err);
+    if (err.status === 429) {
+      return jsonRes({ error: err.message }, 429);
+    }
+    if (err.status === 400) {
+      return jsonRes({ error: err.message }, 400);
+    }
     return jsonRes({ error: "Internal server error" }, 500);
   }
 });

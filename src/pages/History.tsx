@@ -1,72 +1,139 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
-import { useDemo, DEMO_UNITS, DEMO_PILLARS } from "@/hooks/useDemo";
 import { supabase } from "@/integrations/supabase/client";
 import { Layout } from "@/components/Layout";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { BlockCard } from "@/components/history/BlockCard";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Loader2, Search, ChevronDown } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Loader2, Search } from "lucide-react";
+import { Tables } from "@/integrations/supabase/types";
 
-const SECTION_TYPES: Record<string, string> = {
-  concept: "Concept", deep_dive: "Deep Dive", case_study: "Case Study",
-  hands_on: "Hands-On", synthesis: "Synthesis",
-};
-
-function getUnitBadgeLabel(unit: { unit_role?: string; section_type?: string }): string {
-  switch (unit.unit_role) {
-    case "extra_resources": return "Extra Resources";
-    case "repeat": return `Another ${SECTION_TYPES[unit.section_type || ""] || unit.section_type}`;
-    case "bonus": return "Bonus";
-    default: return SECTION_TYPES[unit.section_type || ""] || unit.section_type || "";
-  }
-}
+type PlanBlock = Tables<"plan_blocks">;
+type PlanTask = Tables<"plan_tasks">;
 
 const History = () => {
   const { user } = useAuth();
-  const { isDemo } = useDemo();
+  const userId = user?.id;
+
   const [search, setSearch] = useState("");
   const [pillarFilter, setPillarFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [weekFilter, setWeekFilter] = useState("all");
 
-  const { data: units = [], isLoading: unitsLoading } = useQuery({
-    queryKey: ["units", user?.id],
+  // Pillars (for filter dropdown + name lookup)
+  const { data: pillars = [] } = useQuery({
+    queryKey: ["pillars", userId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("units")
-        .select("*, cycles!inner(user_id, theme, cycle_number, pillar_id, pillars:pillar_id(name))")
-        .eq("cycles.user_id", user!.id)
-        .eq("is_pending_feedback", false)
-        .order("created_at", { ascending: false })
-        .limit(100);
+      const { data, error } = await supabase
+        .from("pillars")
+        .select("id, name")
+        .eq("user_id", userId!)
+        .eq("is_active", true);
+      if (error) throw error;
       return data || [];
     },
-    enabled: !isDemo && !!user,
-    placeholderData: isDemo ? DEMO_UNITS : undefined,
+    enabled: !!userId,
   });
 
-  const { data: pillars = [], isLoading: pillarsLoading } = useQuery({
-    queryKey: ["pillars", user?.id],
+  // All plan blocks for user
+  const { data: allBlocks = [], isLoading: blocksLoading } = useQuery({
+    queryKey: ["plan-blocks-history", userId],
     queryFn: async () => {
-      const { data } = await supabase.from("pillars").select("id, name").eq("user_id", user!.id).eq("is_active", true);
-      return data || [];
+      const { data, error } = await supabase
+        .from("plan_blocks")
+        .select("*")
+        .eq("user_id", userId!)
+        .order("completed_at", { ascending: false, nullsFirst: false });
+      if (error) throw error;
+      return (data || []) as PlanBlock[];
     },
-    enabled: !isDemo && !!user,
-    placeholderData: isDemo ? DEMO_PILLARS : undefined,
+    enabled: !!userId,
   });
 
-  const loading = unitsLoading || pillarsLoading;
+  // All tasks for those blocks
+  const blockIds = useMemo(() => allBlocks.map((b) => b.id), [allBlocks]);
 
-  const filtered = units.filter((u) => {
-    if (search && !u.topic?.toLowerCase().includes(search.toLowerCase()) && !u.content?.toLowerCase().includes(search.toLowerCase())) return false;
-    if (pillarFilter !== "all" && u.pillar_id !== pillarFilter) return false;
-    if (typeFilter !== "all" && u.section_type !== typeFilter) return false;
-    return true;
+  const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
+    queryKey: ["plan-tasks-history", blockIds],
+    queryFn: async () => {
+      if (blockIds.length === 0) return [] as PlanTask[];
+      const { data, error } = await supabase
+        .from("plan_tasks")
+        .select("*")
+        .in("plan_block_id", blockIds)
+        .order("task_order", { ascending: true });
+      if (error) throw error;
+      return (data || []) as PlanTask[];
+    },
+    enabled: blockIds.length > 0,
   });
+
+  // Build pillar name map
+  const pillarNameMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of pillars) m.set(p.id, p.name);
+    return m;
+  }, [pillars]);
+
+  // Build task map: block_id → tasks
+  const tasksByBlock = useMemo(() => {
+    const m = new Map<string, PlanTask[]>();
+    for (const t of allTasks) {
+      if (!m.has(t.plan_block_id)) m.set(t.plan_block_id, []);
+      m.get(t.plan_block_id)!.push(t);
+    }
+    return m;
+  }, [allTasks]);
+
+  // Available week numbers for filter
+  const availableWeeks = useMemo(() => {
+    const weeks = [...new Set(allBlocks.map((b) => b.week_number))].sort((a, b) => a - b);
+    return weeks;
+  }, [allBlocks]);
+
+  // Filter blocks
+  const filteredBlocks = useMemo(() => {
+    const lowerSearch = search.toLowerCase();
+    return allBlocks.filter((b) => {
+      // Pillar filter
+      if (pillarFilter !== "all" && b.pillar_id !== pillarFilter) return false;
+      // Week filter
+      if (weekFilter !== "all" && b.week_number !== Number(weekFilter)) return false;
+      // Search filter — match block title, weekly_goal, or any task action
+      if (lowerSearch) {
+        const blockMatch =
+          b.title.toLowerCase().includes(lowerSearch) ||
+          b.weekly_goal.toLowerCase().includes(lowerSearch);
+        const blockTasks = tasksByBlock.get(b.id) || [];
+        const taskMatch = blockTasks.some((t) =>
+          t.action.toLowerCase().includes(lowerSearch),
+        );
+        if (!blockMatch && !taskMatch) return false;
+      }
+      return true;
+    });
+  }, [allBlocks, pillarFilter, weekFilter, search, tasksByBlock]);
+
+  // Sort: completed first (most recent), then incomplete
+  const sortedBlocks = useMemo(() => {
+    return [...filteredBlocks].sort((a, b) => {
+      if (a.is_completed && !b.is_completed) return -1;
+      if (!a.is_completed && b.is_completed) return 1;
+      // Both completed: sort by completed_at desc
+      if (a.completed_at && b.completed_at)
+        return new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime();
+      // Both incomplete: sort by week_number
+      return a.week_number - b.week_number;
+    });
+  }, [filteredBlocks]);
+
+  const loading = blocksLoading || tasksLoading;
 
   if (loading) {
     return (
@@ -83,71 +150,60 @@ const History = () => {
       <div className="max-w-3xl mx-auto space-y-6">
         <h1 className="font-serif text-2xl font-bold">History</h1>
 
+        {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search topics..." className="pl-9" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search blocks & tasks..."
+              className="pl-9"
+            />
           </div>
           <Select value={pillarFilter} onValueChange={setPillarFilter}>
-            <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="Pillar" /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-40">
+              <SelectValue placeholder="Pillar" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Pillars</SelectItem>
-              {pillars.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              {pillars.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="Type" /></SelectTrigger>
+          <Select value={weekFilter} onValueChange={setWeekFilter}>
+            <SelectTrigger className="w-full sm:w-32">
+              <SelectValue placeholder="Week" />
+            </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="concept">Concept</SelectItem>
-              <SelectItem value="deep_dive">Deep Dive</SelectItem>
-              <SelectItem value="case_study">Case Study</SelectItem>
-              <SelectItem value="hands_on">Hands-On</SelectItem>
-              <SelectItem value="synthesis">Synthesis</SelectItem>
+              <SelectItem value="all">All Weeks</SelectItem>
+              {availableWeeks.map((w) => (
+                <SelectItem key={w} value={String(w)}>
+                  Week {w}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
 
+        {/* Block list */}
         <div className="space-y-2">
-          {filtered.map((u) => (
-            <Collapsible key={u.id}>
-              <CollapsibleTrigger className="w-full">
-                <Card className="border-border hover:border-accent/30 transition-colors">
-                  <CardContent className="flex items-center justify-between py-3">
-                    <div className="text-left space-y-0.5 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium">{u.topic}</span>
-                        <Badge variant="secondary" className="text-[10px] capitalize">{getUnitBadgeLabel(u)}</Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {(u as any).cycles?.pillars?.name} · Cycle {(u as any).cycles?.cycle_number}
-                        {u.feedback_difficulty && ` · ${u.feedback_difficulty.replace("_", " ")}`}
-                      </p>
-                    </div>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
-                  </CardContent>
-                </Card>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <Card className="border-border border-t-0 rounded-t-none">
-                  <CardContent className="py-4">
-                    <div className="prose-powerhouse text-sm max-w-none">
-                      <ReactMarkdown>{u.content || "No content available."}</ReactMarkdown>
-                    </div>
-                    {(u.feedback_difficulty || u.feedback_value) && (
-                      <div className="flex gap-2 mt-4 pt-3 border-t border-border">
-                        {u.feedback_difficulty && <Badge variant="outline" className="text-[10px] capitalize">{u.feedback_difficulty.replace("_", " ")}</Badge>}
-                        {u.feedback_value && <Badge variant="outline" className="text-[10px] capitalize">{u.feedback_value} value</Badge>}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </CollapsibleContent>
-            </Collapsible>
+          {sortedBlocks.map((block) => (
+            <BlockCard
+              key={block.id}
+              block={block}
+              tasks={tasksByBlock.get(block.id) || []}
+              pillarName={pillarNameMap.get(block.pillar_id) || "Unknown"}
+            />
           ))}
-          {filtered.length === 0 && (
+          {sortedBlocks.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-8">
-              {units.length === 0 ? "No units yet. Start learning from the dashboard!" : "No matches found."}
+              {allBlocks.length === 0
+                ? "No plan blocks yet. Start learning from the dashboard!"
+                : "No matches found."}
             </p>
           )}
         </div>

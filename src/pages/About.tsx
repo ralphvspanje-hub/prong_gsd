@@ -36,11 +36,11 @@ const About = () => {
             </p>
 
             <p>
-              DailyProng is built on that idea. Not one deep skill. Not shallow breadth. A deliberate set of growing tines — each one strategic, each one connected, each one built through focused daily practice.
+              ProngGSD is built on that idea. Not one deep skill. Not shallow breadth. A deliberate set of growing tines — each one strategic, each one connected, each one built through focused daily practice.
             </p>
 
             <p>
-              One section per session. One cycle at a time. Compounding over months into something that actually changes what you can do.
+              One task per day. One block at a time. Compounding over weeks into something that actually changes what you can do.
             </p>
 
             <p>

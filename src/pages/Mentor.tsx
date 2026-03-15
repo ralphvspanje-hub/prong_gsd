@@ -3,12 +3,16 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDemo, DEMO_MENTOR_MESSAGES } from "@/hooks/useDemo";
 import { useMentorName } from "@/hooks/useMentorName";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Loader2, Plus, ArrowLeftRight, Pencil, BarChart3, Trash2, RefreshCw, Check, X } from "lucide-react";
+import {
+  Send, Loader2, Plus, ArrowLeftRight, Pencil, BarChart3, Trash2, RefreshCw,
+  Check, X, Gauge, HelpCircle, Repeat2,
+} from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -35,20 +39,41 @@ const QUICK_ACTIONS = [
   { label: "Change Level", icon: BarChart3, message: "I want to reassess the difficulty level for one of my pillars. Can you ask me some questions to figure out the right level?" },
   { label: "Delete a Pillar", icon: Trash2, message: "I want to delete one of my pillars." },
   { label: "Full Recalibration", icon: RefreshCw, message: "I want to do a full recalibration of my entire learning plan and career goals." },
+  { label: "Adjust Pacing", icon: Gauge, message: "I want to adjust the pacing of my learning plan — it might be too fast or too slow for me right now." },
+  { label: "I'm Stuck", icon: HelpCircle, message: "I'm stuck on something in my current learning tasks. Can you help me figure out a way forward?" },
+  { label: "Swap Resources", icon: Repeat2, message: "I'd like to find different learning resources for one of my current tasks. The current one isn't working for me." },
 ];
 
-const parseProposedChanges = (content: string): { cleanContent: string; changes: ProposedChanges | null } => {
+const ACTION_TOASTS: Record<string, string> = {
+  adjust_pacing: "Pacing updated!",
+  restructure_plan: "Plan updated — upcoming weeks will regenerate.",
+  regenerate_upcoming: "Upcoming blocks cleared — they'll regenerate with your next week.",
+  swap_resource: "Task resource updated!",
+};
+
+/** Parse PROPOSED_CHANGES from assistant message. Supports both single object and array format. */
+const parseProposedChanges = (
+  content: string
+): { cleanContent: string; changes: ProposedChanges[] } => {
   const marker = "PROPOSED_CHANGES";
   const idx = content.indexOf(marker);
-  if (idx === -1) return { cleanContent: content, changes: null };
+  if (idx === -1) return { cleanContent: content, changes: [] };
 
   const cleanContent = content.substring(0, idx).trim();
   const jsonStr = content.substring(idx + marker.length).trim();
   try {
-    const changes = JSON.parse(jsonStr);
-    return { cleanContent, changes };
+    const parsed = JSON.parse(jsonStr);
+    // Array of actions
+    if (Array.isArray(parsed)) {
+      return { cleanContent, changes: parsed.filter((p: any) => p.action) };
+    }
+    // Single action object
+    if (parsed.action) {
+      return { cleanContent, changes: [parsed] };
+    }
+    return { cleanContent, changes: [] };
   } catch {
-    return { cleanContent: content, changes: null };
+    return { cleanContent: content, changes: [] };
   }
 };
 
@@ -60,12 +85,14 @@ const Mentor = () => {
   const { isDemo } = useDemo();
   const { mentorName } = useMentorName();
   const isMobile = useIsMobile();
+  const queryClient = useQueryClient();
   const [messages, setMessages] = useState<MentorMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(false);
   const [applyingChanges, setApplyingChanges] = useState<string | null>(null);
-  const [dismissedChanges, setDismissedChanges] = useState<Set<number>>(new Set());
+  // Track dismissed changes as "messageIndex-actionIndex" keys
+  const [dismissedChanges, setDismissedChanges] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const didShowEmpty = useRef(false);
@@ -157,21 +184,29 @@ const Mentor = () => {
     inputRef.current?.focus();
   };
 
-  const applyChanges = async (changes: ProposedChanges) => {
+  const invalidateAllQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["learning-plan"] });
+    queryClient.invalidateQueries({ queryKey: ["plan-blocks-current"] });
+    queryClient.invalidateQueries({ queryKey: ["plan-tasks"] });
+    queryClient.invalidateQueries({ queryKey: ["user-progress"] });
+    queryClient.invalidateQueries({ queryKey: ["pillars"] });
+  };
+
+  const applyChanges = async (change: ProposedChanges, dismissKey: string) => {
     if (isDemo) {
       toast.info("Sign up to apply changes!");
       return;
     }
 
-    setApplyingChanges(changes.action);
+    setApplyingChanges(change.action);
     try {
-      if (changes.action === "full_recalibration") {
+      if (change.action === "full_recalibration") {
         window.location.href = "/onboarding";
         return;
       }
 
       const { error } = await supabase.functions.invoke("gsd-apply-mentor-changes", {
-        body: changes,
+        body: change,
       });
       if (error) {
         let msg = error.message;
@@ -182,8 +217,15 @@ const Mentor = () => {
         throw new Error(msg);
       }
 
-      toast.success("Changes applied!");
-      window.location.reload();
+      // Action-specific toast or generic
+      const toastMsg = ACTION_TOASTS[change.action] || "Changes applied!";
+      toast.success(toastMsg);
+
+      // Dismiss this card after successful apply
+      setDismissedChanges((prev) => new Set([...prev, dismissKey]));
+
+      // Invalidate queries instead of full reload
+      invalidateAllQueries();
     } catch (err: any) {
       toast.error("Failed to apply changes: " + err.message);
     }
@@ -195,14 +237,14 @@ const Mentor = () => {
 
   if (showEmptyState) didShowEmpty.current = true;
 
-  const openingMessage = `Hey! I'm ${mentorName} — your learning strategist. I know your Prongs, your pillars, and where you're headed. Think of me as a thinking partner who asks before they act. What's on your mind?`;
+  const openingMessage = `Hey! I'm ${mentorName} — your learning strategist. I know your Prongs, your pillars, your plan, and where you're headed. Think of me as a thinking partner who asks before they act. What's on your mind?`;
 
   return (
     <Layout>
       <div className="max-w-2xl mx-auto">
         {isDemo && (
           <div className="mb-4 rounded-lg border border-accent/30 bg-accent/5 px-4 py-2 text-sm text-accent flex items-center justify-between">
-            <span>👀 Demo Mode — Explore the app with sample data</span>
+            <span>Demo Mode — Explore the app with sample data</span>
           </div>
         )}
 
@@ -298,8 +340,7 @@ const Mentor = () => {
                         const { cleanContent, changes } =
                           msg.role === "assistant"
                             ? parseProposedChanges(msg.content)
-                            : { cleanContent: msg.content, changes: null };
-                        const isDismissed = dismissedChanges.has(i);
+                            : { cleanContent: msg.content, changes: [] };
 
                         return (
                           <motion.div
@@ -325,40 +366,51 @@ const Mentor = () => {
                                   msg.content
                                 )}
                               </div>
-                              {changes && !isDismissed && (
-                                <Card className="border-accent/30">
-                                  <CardContent className="py-3 space-y-3">
-                                    <p className="text-sm font-medium">Apply these changes?</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      Action: <span className="capitalize">{changes.action.replace(/_/g, " ")}</span>
-                                    </p>
-                                    <div className="flex gap-2">
-                                      <Button
-                                        size="sm"
-                                        className="gap-1"
-                                        onClick={() => applyChanges(changes)}
-                                        disabled={!!applyingChanges}
-                                      >
-                                        {applyingChanges === changes.action ? (
-                                          <Loader2 className="h-3 w-3 animate-spin" />
-                                        ) : (
-                                          <Check className="h-3 w-3" />
-                                        )}
-                                        Confirm
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="gap-1"
-                                        onClick={() => setDismissedChanges(new Set([...dismissedChanges, i]))}
-                                      >
-                                        <X className="h-3 w-3" />
-                                        Cancel
-                                      </Button>
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                              )}
+                              {changes.map((change, ci) => {
+                                const dismissKey = `${i}-${ci}`;
+                                if (dismissedChanges.has(dismissKey)) return null;
+                                return (
+                                  <Card key={ci} className="border-accent/30">
+                                    <CardContent className="py-3 space-y-3">
+                                      <p className="text-sm font-medium">Apply these changes?</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        Action:{" "}
+                                        <span className="capitalize">
+                                          {change.action.replace(/_/g, " ")}
+                                        </span>
+                                      </p>
+                                      <div className="flex gap-2">
+                                        <Button
+                                          size="sm"
+                                          className="gap-1"
+                                          onClick={() => applyChanges(change, dismissKey)}
+                                          disabled={!!applyingChanges}
+                                        >
+                                          {applyingChanges === change.action ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <Check className="h-3 w-3" />
+                                          )}
+                                          Confirm
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="gap-1"
+                                          onClick={() =>
+                                            setDismissedChanges(
+                                              (prev) => new Set([...prev, dismissKey])
+                                            )
+                                          }
+                                        >
+                                          <X className="h-3 w-3" />
+                                          Cancel
+                                        </Button>
+                                      </div>
+                                    </CardContent>
+                                  </Card>
+                                );
+                              })}
                             </div>
                           </motion.div>
                         );

@@ -14,7 +14,7 @@ This is the React application source root. Entry point: `main.tsx` → `App.tsx`
    - `DemoProvider` (demo mode)
    - `TooltipProvider`
    - `Toaster` + `Sonner` (toast notifications)
-   - `BrowserRouter` → `UnitGenerationProvider` → `Routes`
+   - `BrowserRouter` → `Routes`
 
 ## Directory Map
 

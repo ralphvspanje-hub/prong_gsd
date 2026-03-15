@@ -225,6 +225,7 @@ export type Database = {
       }
       pillars: {
         Row: {
+          blocks_completed_at_level: number
           created_at: string
           current_level: number
           description: string | null
@@ -240,6 +241,7 @@ export type Database = {
           why_it_matters: string | null
         }
         Insert: {
+          blocks_completed_at_level?: number
           created_at?: string
           current_level?: number
           description?: string | null
@@ -255,6 +257,7 @@ export type Database = {
           why_it_matters?: string | null
         }
         Update: {
+          blocks_completed_at_level?: number
           created_at?: string
           current_level?: number
           description?: string | null
@@ -441,6 +444,14 @@ export type Database = {
           unique_differentiator: string | null
           updated_at: string
           user_id: string
+          // MANUALLY ADDED — ProngGSD Phase 1 columns. Regenerate types when possible.
+          pacing_profile: string | null
+          time_commitment: string | null
+          job_situation: string | null
+          job_timeline_weeks: number | null
+          tool_setup: Record<string, unknown> | null
+          resume_text: string | null
+          linkedin_context: string | null
         }
         Insert: {
           created_at?: string
@@ -457,6 +468,14 @@ export type Database = {
           unique_differentiator?: string | null
           updated_at?: string
           user_id: string
+          // MANUALLY ADDED — ProngGSD Phase 1 columns. Regenerate types when possible.
+          pacing_profile?: string | null
+          time_commitment?: string | null
+          job_situation?: string | null
+          job_timeline_weeks?: number | null
+          tool_setup?: Record<string, unknown> | null
+          resume_text?: string | null
+          linkedin_context?: string | null
         }
         Update: {
           created_at?: string
@@ -471,6 +490,247 @@ export type Database = {
           name?: string | null
           target_role?: string | null
           unique_differentiator?: string | null
+          updated_at?: string
+          user_id?: string
+          // MANUALLY ADDED — ProngGSD Phase 1 columns. Regenerate types when possible.
+          pacing_profile?: string | null
+          time_commitment?: string | null
+          job_situation?: string | null
+          job_timeline_weeks?: number | null
+          tool_setup?: Record<string, unknown> | null
+          resume_text?: string | null
+          linkedin_context?: string | null
+        }
+        Relationships: []
+      }
+      // MANUALLY ADDED — ProngGSD Phase 1 tables. Regenerate types when possible.
+      curated_resources: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          max_level: number
+          min_level: number
+          platform: string
+          resource_type: string
+          skill_area: string
+          tags: string[] | null
+          title: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          max_level?: number
+          min_level?: number
+          platform: string
+          resource_type: string
+          skill_area: string
+          tags?: string[] | null
+          title: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          max_level?: number
+          min_level?: number
+          platform?: string
+          resource_type?: string
+          skill_area?: string
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
+      learning_plans: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          pacing_profile: string
+          plan_outline: Json
+          total_weeks: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          pacing_profile: string
+          plan_outline: Json
+          total_weeks: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          pacing_profile?: string
+          plan_outline?: Json
+          total_weeks?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      plan_blocks: {
+        Row: {
+          checkin_feedback: Json | null
+          completed_at: string | null
+          context_brief: string | null
+          created_at: string
+          id: string
+          is_completed: boolean
+          completion_criteria: string | null
+          pacing_note: string | null
+          pillar_id: string
+          plan_id: string
+          title: string
+          user_id: string
+          week_number: number
+          weekly_goal: string
+        }
+        Insert: {
+          checkin_feedback?: Json | null
+          completed_at?: string | null
+          context_brief?: string | null
+          created_at?: string
+          id?: string
+          is_completed?: boolean
+          completion_criteria?: string | null
+          pacing_note?: string | null
+          pillar_id: string
+          plan_id: string
+          title: string
+          user_id: string
+          week_number: number
+          weekly_goal: string
+        }
+        Update: {
+          checkin_feedback?: Json | null
+          completed_at?: string | null
+          context_brief?: string | null
+          created_at?: string
+          id?: string
+          is_completed?: boolean
+          completion_criteria?: string | null
+          pacing_note?: string | null
+          pillar_id?: string
+          plan_id?: string
+          title?: string
+          user_id?: string
+          week_number?: number
+          weekly_goal?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_blocks_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "learning_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_tasks: {
+        Row: {
+          action: string
+          completed_at: string | null
+          created_at: string
+          estimated_time_minutes: number | null
+          id: string
+          is_completed: boolean
+          plan_block_id: string
+          platform: string
+          resource_type: string
+          search_query: string | null
+          task_order: number
+          url: string | null
+          user_id: string
+          why_text: string | null
+        }
+        Insert: {
+          action: string
+          completed_at?: string | null
+          created_at?: string
+          estimated_time_minutes?: number | null
+          id?: string
+          is_completed?: boolean
+          plan_block_id: string
+          platform: string
+          resource_type: string
+          search_query?: string | null
+          task_order: number
+          url?: string | null
+          user_id: string
+          why_text?: string | null
+        }
+        Update: {
+          action?: string
+          completed_at?: string | null
+          created_at?: string
+          estimated_time_minutes?: number | null
+          id?: string
+          is_completed?: boolean
+          plan_block_id?: string
+          platform?: string
+          resource_type?: string
+          search_query?: string | null
+          task_order?: number
+          url?: string | null
+          user_id?: string
+          why_text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_tasks_plan_block_id_fkey"
+            columns: ["plan_block_id"]
+            isOneToOne: false
+            referencedRelation: "plan_blocks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_progress: {
+        Row: {
+          created_at: string
+          current_day: number
+          current_streak: number
+          id: string
+          last_activity_date: string | null
+          longest_streak: number
+          total_tasks_completed: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_day?: number
+          current_streak?: number
+          id?: string
+          last_activity_date?: string | null
+          longest_streak?: number
+          total_tasks_completed?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_day?: number
+          current_streak?: number
+          id?: string
+          last_activity_date?: string | null
+          longest_streak?: number
+          total_tasks_completed?: number
           updated_at?: string
           user_id?: string
         }

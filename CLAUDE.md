@@ -4,7 +4,7 @@
 
 ProngGSD ("Get Shit Done") is an AI-powered learning orchestrator, forked from DailyProng. Instead of generating learning content directly, it builds personalized multi-week plans that route users to the best external platforms for each skill, with task tracking and pacing adaptation. Users complete a structured AI onboarding, then follow a plan of daily tasks with external resources. An AI mentor provides ongoing career guidance and can restructure the plan. Dark/light theme.
 
-**Status:** Phase 1 (Foundation) complete. Dashboard is a placeholder — new task tracker UI coming in Phase 4. See `IMPLEMENTATION_DOC_LEARNING_ORCHESTRATOR.md` for the full vision.
+**Status:** Phase 8 (Polish and Launch Prep) complete. Dead code removed (UnitDisplay, NavLink, Index.tsx). Critical bugs fixed: Gemini model mismatch in extend_plan, plan generation error handling, Dashboard silent polling timeout, CheckinModal close handler. About.tsx rebranded from DailyProng to ProngGSD. Curated resources expanded from 18 to 55+ entries across SQL, Python, Interview Prep, Data Viz, and General. See `IMPLEMENTATION_DOC_LEARNING_ORCHESTRATOR.md` for the full vision.
 
 ## Tech Stack
 
@@ -29,9 +29,9 @@ prong_gsd/
 │   ├── main.tsx              # Entry point → App.tsx
 │   ├── App.tsx               # Providers, routes, guards
 │   ├── pages/                # Route-level components
-│   ├── components/           # Layout, NavLink, UnitDisplay
+│   ├── components/           # Layout, NavLink, UnitDisplay, plan/ (task tracker)
 │   │   └── ui/               # shadcn/ui primitives — do not edit
-│   ├── hooks/                # Auth, demo, theme, mentor name, mobile, toast, unit generation
+│   ├── hooks/                # Auth, demo, theme, mentor name, mobile, toast
 │   ├── integrations/supabase/# Auto-generated client + types — do not edit
 │   ├── lib/                  # utils.ts (cn() helper only)
 │   └── test/                 # Vitest setup + Playwright config
@@ -41,9 +41,9 @@ prong_gsd/
 │   └── functions/            # Edge functions (Deno) — all prefixed with gsd-
 │       ├── gsd-mentor-chat/         # AI mentor conversation
 │       ├── gsd-apply-mentor-changes/ # Apply pillar mutations
-│       ├── gsd-generate-plan/       # AI learning unit generation (will become plan generation)
+│       ├── gsd-generate-plan/       # AI plan generation (multi-week outlines + weekly plan blocks)
 │       ├── gsd-onboarding-chat/     # AI onboarding conversation
-│       ├── gsd-process-checkin/     # Unit feedback + cycle completion (will become check-in)
+│       ├── gsd-process-checkin/     # Task/block completion, streak, pacing, pillar leveling
 │       └── gsd-reset-user-data/     # Destructive data reset
 └── package.json
 ```
@@ -58,7 +58,7 @@ Each subfolder has its own `CLAUDE.md`. Read it when working in that folder.
 |-------|---------|
 | **user_profile** | User info, career goals, mentor name, learning prefs + ProngGSD fields |
 | **phases** | Named time-bounded learning phases with goals |
-| **pillars** | Strategic skill pillars (name, level 1–5, trend, weight) |
+| **pillars** | Strategic skill pillars (name, level 1–5, trend, weight, blocks_completed_at_level) |
 | **phase_weights** | Many-to-many link: phase ↔ pillar with weight |
 | **topic_map** | Clusters of subtopics per pillar, priority-ordered |
 | **cycles** | Themed multi-section learning cycles per pillar |
@@ -120,12 +120,14 @@ Everything in `src/components/ui/` is a shadcn/ui primitive. Add new ones via th
 |------|-----------|-------|---------|
 | `/auth` | Auth | AuthRoute | Login/signup (demo hidden) |
 | `/` | — | — | Redirects to `/dashboard` |
-| `/dashboard` | Dashboard | Protected | Placeholder — "ProngGSD — Coming soon" |
+| `/dashboard` | Dashboard | Protected | Three-layer daily task view (redirects to `/onboarding` if no plan) |
+| `/plan` | PlanOverview | Protected | Full multi-week plan timeline (redirects to `/onboarding` if no plan) |
+| `/context-upload` | ContextUpload | Protected | Resume/LinkedIn PDF upload before onboarding (optional, skippable). Redirects to `/dashboard` if plan exists. |
 | `/onboarding` | Onboarding | Protected | AI onboarding chat |
-| `/progress` | Progress | Protected | Pillar levels + cycle history |
-| `/history` | History | Protected | Past units with search/filters |
-| `/settings` | SettingsPage | Protected | Profile, mentor name, pillars, danger zone |
-| `/mentor` | Mentor | Protected | AI mentor chat |
+| `/progress` | Progress | Protected | Plan-based progress: stats, streak + heatmap, weekly/pillar charts (Recharts), pillar levels, plan summary |
+| `/history` | History | Protected | Plan blocks with tasks, searchable/filterable by pillar and week |
+| `/settings` | SettingsPage | Protected | Profile, mentor name, pillars, LinkedIn/resume context, danger zone |
+| `/mentor` | Mentor | Protected | AI mentor chat (plan-aware, multi-action) |
 | `/about` | About | None | Static "What is a Prong?" page |
 | `*` | NotFound | None | 404 |
 
@@ -153,15 +155,32 @@ Edge function env vars (set in Supabase dashboard):
 
 ## Common Gotchas
 
-- `Index.tsx` in `src/pages/` is **unused** — `/` redirects to `/dashboard`, the file is orphaned
-- `NavLink.tsx` in `src/components/` is **unused** — `Layout.tsx` uses plain `Link` from react-router
+- `Index.tsx`, `NavLink.tsx`, `UnitDisplay.tsx` were deleted in Phase 8 — if referenced elsewhere, those references are stale
 - README says the env var is `VITE_SUPABASE_ANON_KEY` but `client.ts` actually reads `VITE_SUPABASE_PUBLISHABLE_KEY` — use the latter
 - `supabase/config.toml` has `verify_jwt = false` for both edge functions — JWT validation is done manually in the function code
 - Path alias: `@/` maps to `src/`
-- Dashboard is a placeholder — the old unit-based flow was stripped in Phase 1
-- Demo mode entry point is hidden on Auth page — demo context still exists but is non-functional with placeholder dashboard
-- `About.tsx` still references "DailyProng" — intentionally left as-is
+- Dashboard redirects to `/context-upload` if no plan exists; shows three-layer task tracker if plan exists. Block polling has a 30s timeout with retry button on failure.
+- Demo mode entry point is hidden on Auth page — demo context still exists but is non-functional with new task tracker dashboard
+- `useUnitGeneration` hook was removed in Phase 4, file deleted in Phase 8
+- Plan block completion routes through `gsd-process-checkin` (block_complete) → then frontend calls `gsd-generate-plan` for next week with difficulty_adjustment from the response
+- Streak tracking is authoritative in `gsd-process-checkin` — frontend does NOT write to `user_progress` for streaks (only decrements `total_tasks_completed` on un-completion)
+- Task completion fires `gsd-process-checkin` as fire-and-forget (non-blocking); block completion awaits the response
+- `pillars.blocks_completed_at_level` tracks blocks completed at current level for threshold-based leveling — reset to 0 on level change
+- `gsd-generate-plan` has three modes: `full_plan`, `plan_block`, `extend_plan` — extend_plan adds weeks to exploratory plans
+- Mobile bottom nav has 5 items (History hidden) — History is only in the desktop nav
+- `About.tsx` rebranded from DailyProng to ProngGSD in Phase 8
 - localStorage keys use `pronggsd-` prefix (not `dailyprong-`)
+- Mentor chat PROPOSED_CHANGES supports both single object and array format — frontend `parseProposedChanges` handles both
+- `apply-mentor-changes` auto-cleans future plan blocks when adding/deleting/swapping pillars — no separate `regenerate_upcoming` needed
+- Mentor.tsx uses query invalidation (not `window.location.reload()`) after applying changes — queries: `learning-plan`, `plan-blocks-current`, `plan-tasks`, `user-progress`, `pillars`
+- `swap_resource` in apply-mentor-changes uses `new_action`, `new_platform`, etc. as input keys (prefixed with `new_`) mapped to task columns
+- `restructure_plan` only accepts future weeks (> current week) — past/current weeks preserved automatically
+- `change_level` via mentor resets `blocks_completed_at_level` to 0 (same as process-checkin leveling)
+- Progress page uses Recharts via shadcn/ui `ChartContainer` from `src/components/ui/chart.tsx` — first actual chart usage in the app
+- Progress page derives activity heatmap from `plan_tasks.completed_at` — no historical streak table exists
+- Progress page shows pillar levels as current snapshot only — no historical level change data stored
+- History page replaced legacy units view with plan blocks + tasks — old units data no longer displayed
+- History page fetches all blocks + all tasks in two queries (bounded by plan size, not paginated)
 
 ---
 

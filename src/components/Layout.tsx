@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDemo } from "@/hooks/useDemo";
 import { useTheme } from "@/hooks/useTheme";
 import { useMentorName } from "@/hooks/useMentorName";
-import { Sun, Moon, LogOut, Zap, BarChart3, Clock, Settings, MessageSquare } from "lucide-react";
+import { Sun, Moon, LogOut, Zap, Map, BarChart3, Clock, Settings, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const Layout = ({ children }: { children: ReactNode }) => {
@@ -16,11 +16,12 @@ export const Layout = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
 
   const navItems = [
-    { path: "/dashboard", label: "Today", icon: Zap },
-    { path: "/progress", label: "Progress", icon: BarChart3 },
-    { path: "/history", label: "History", icon: Clock },
-    { path: "/settings", label: "Settings", icon: Settings },
-    { path: "/mentor", label: mentorName, icon: MessageSquare },
+    { path: "/dashboard", label: "Today", icon: Zap, mobileVisible: true },
+    { path: "/plan", label: "Plan", icon: Map, mobileVisible: true },
+    { path: "/progress", label: "Progress", icon: BarChart3, mobileVisible: true },
+    { path: "/history", label: "History", icon: Clock, mobileVisible: false },
+    { path: "/settings", label: "Settings", icon: Settings, mobileVisible: true },
+    { path: "/mentor", label: mentorName, icon: MessageSquare, mobileVisible: true },
   ];
 
   const handleSignOut = () => {
@@ -65,7 +66,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
 
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/95 backdrop-blur-sm md:hidden">
         <div className="flex justify-around py-2">
-          {navItems.map((item) => (
+          {navItems.filter((item) => item.mobileVisible).map((item) => (
             <Link key={item.path} to={item.path}>
               <Button variant="ghost" size="sm" className={`flex-col gap-0.5 h-auto py-1.5 px-2 ${location.pathname === item.path ? "text-accent" : "text-muted-foreground"}`}>
                 <item.icon className="h-4 w-4" />

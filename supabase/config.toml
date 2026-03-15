@@ -1,19 +1,19 @@
 project_id = "hpubamqxoeckzrbvgsof"
 
-[functions.mentor-chat]
+[functions.gsd-mentor-chat]
 verify_jwt = false
 
-[functions.apply-mentor-changes]
+[functions.gsd-apply-mentor-changes]
 verify_jwt = false
 
-[functions.generate-unit]
+[functions.gsd-generate-plan]
 verify_jwt = false
 
-[functions.onboarding-chat]
+[functions.gsd-onboarding-chat]
 verify_jwt = false
 
-[functions.process-feedback]
+[functions.gsd-process-checkin]
 verify_jwt = false
 
-[functions.reset-user-data]
+[functions.gsd-reset-user-data]
 verify_jwt = false

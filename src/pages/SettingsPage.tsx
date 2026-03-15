@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useDemo, DEMO_PROFILE, DEMO_PILLARS } from "@/hooks/useDemo";
@@ -8,10 +8,11 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Loader2, Save, AlertTriangle, Trash2, Minus, Plus, RotateCcw, Rewind, UserX } from "lucide-react";
+import { Loader2, Save, AlertTriangle, Trash2, Minus, Plus, RotateCcw, Rewind, UserX, Upload, FileText, Link } from "lucide-react";
 import { toast } from "sonner";
 
 const SettingsPage = () => {
@@ -24,6 +25,13 @@ const SettingsPage = () => {
   const [savingMentor, setSavingMentor] = useState(false);
   const [localMentorName, setLocalMentorName] = useState("");
   const [resetting, setResetting] = useState(false);
+  // Connect your context state
+  const [linkedinFileName, setLinkedinFileName] = useState<string | null>(null);
+  const [savingLinkedin, setSavingLinkedin] = useState(false);
+  const linkedinInputRef = useRef<HTMLInputElement>(null);
+  const [resumeFileName, setResumeFileName] = useState<string | null>(null);
+  const [savingResume, setSavingResume] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: fetchedProfile, isLoading: profileLoading } = useQuery({
     queryKey: ["user_profile", user?.id],
@@ -51,6 +59,8 @@ const SettingsPage = () => {
     if (fetchedProfile) {
       setProfile(fetchedProfile);
       setLocalMentorName((fetchedProfile as any)?.mentor_name || "");
+      if (fetchedProfile.linkedin_context) setLinkedinFileName("LinkedIn uploaded");
+      if (fetchedProfile.resume_text) setResumeFileName("Resume uploaded");
     }
   }, [fetchedProfile]);
 
@@ -120,6 +130,93 @@ const SettingsPage = () => {
     } catch (err: any) {
       toast.error("Failed to delete pillar: " + err.message);
     }
+  };
+
+  const handleLinkedinUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      toast.error("Please upload a PDF file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File too large. Max 5 MB.");
+      return;
+    }
+    if (isDemo) { toast.success("LinkedIn uploaded! (Demo mode)"); return; }
+    setSavingLinkedin(true);
+    try {
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+        "pdfjs-dist/build/pdf.worker.min.mjs",
+        import.meta.url,
+      ).toString();
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pages: string[] = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        pages.push(textContent.items.map((item: any) => item.str).join(" "));
+      }
+      const linkedinText = pages.join("\n\n");
+      const { error } = await supabase
+        .from("user_profile")
+        .update({ linkedin_context: linkedinText })
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["user_profile", user?.id] });
+      setLinkedinFileName(file.name);
+      toast.success("LinkedIn profile uploaded and parsed.");
+    } catch (err: any) {
+      toast.error("Failed to process LinkedIn PDF: " + err.message);
+    }
+    setSavingLinkedin(false);
+    if (linkedinInputRef.current) linkedinInputRef.current.value = "";
+  };
+
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      toast.error("Please upload a PDF file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File too large. Max 5 MB.");
+      return;
+    }
+    if (isDemo) { toast.success("Resume uploaded! (Demo mode)"); return; }
+    setSavingResume(true);
+    try {
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+        "pdfjs-dist/build/pdf.worker.min.mjs",
+        import.meta.url,
+      ).toString();
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pages: string[] = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        pages.push(textContent.items.map((item: any) => item.str).join(" "));
+      }
+      const resumeText = pages.join("\n\n");
+      const { error } = await supabase
+        .from("user_profile")
+        .update({ resume_text: resumeText })
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["user_profile", user?.id] });
+      setResumeFileName(file.name);
+      toast.success("Resume uploaded and parsed.");
+    } catch (err: any) {
+      toast.error("Failed to process resume: " + err.message);
+    }
+    setSavingResume(false);
+    // Reset file input so re-uploading the same file triggers onChange
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const resetAllData = async () => {
@@ -321,6 +418,83 @@ const SettingsPage = () => {
                 </div>
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        {/* Connect Your Context */}
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="font-serif text-lg flex items-center gap-2">
+              <Link className="h-4 w-4 text-accent" />
+              Connect Your Context
+            </CardTitle>
+            <CardDescription>
+              Adding your LinkedIn profile and resume helps ProngGSD create better learning plans tailored to your real background and experience. Both are completely optional.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label>LinkedIn Profile</Label>
+              <div className="flex items-center gap-3">
+                <input
+                  ref={linkedinInputRef}
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleLinkedinUpload}
+                  className="hidden"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => linkedinInputRef.current?.click()}
+                  disabled={savingLinkedin}
+                  className="gap-2"
+                >
+                  {savingLinkedin ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  Upload PDF
+                </Button>
+                {linkedinFileName && (
+                  <span className="text-sm text-muted-foreground flex items-center gap-1">
+                    <FileText className="h-3.5 w-3.5" />
+                    {linkedinFileName}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Upload your LinkedIn profile as PDF (max 5 MB). To export: go to your LinkedIn profile → click "Resources" → "Save to PDF".
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Resume</Label>
+              <div className="flex items-center gap-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleResumeUpload}
+                  className="hidden"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={savingResume}
+                  className="gap-2"
+                >
+                  {savingResume ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  Upload PDF
+                </Button>
+                {resumeFileName && (
+                  <span className="text-sm text-muted-foreground flex items-center gap-1">
+                    <FileText className="h-3.5 w-3.5" />
+                    {resumeFileName}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Upload your resume (PDF, max 5 MB). We'll extract the text to better understand your background.
+              </p>
+            </div>
           </CardContent>
         </Card>
 

@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { DemoProvider, useDemo } from "@/hooks/useDemo";
-import { UnitGenerationProvider } from "@/hooks/useUnitGeneration";
+import ContextUpload from "./pages/ContextUpload";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Onboarding from "./pages/Onboarding";
@@ -14,6 +14,7 @@ import Progress from "./pages/Progress";
 import History from "./pages/History";
 import SettingsPage from "./pages/SettingsPage";
 import Mentor from "./pages/Mentor";
+import PlanOverview from "./pages/PlanOverview";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -59,11 +60,12 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
-              <UnitGenerationProvider>
               <Routes>
                 <Route path="/auth" element={<AuthRoute />} />
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                <Route path="/plan" element={<ProtectedRoute><PlanOverview /></ProtectedRoute>} />
+                <Route path="/context-upload" element={<ProtectedRoute><ContextUpload /></ProtectedRoute>} />
                 <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
                 <Route path="/progress" element={<ProtectedRoute><Progress /></ProtectedRoute>} />
                 <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
@@ -72,7 +74,6 @@ const App = () => (
                 <Route path="/about" element={<About />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
-              </UnitGenerationProvider>
             </BrowserRouter>
           </TooltipProvider>
         </DemoProvider>

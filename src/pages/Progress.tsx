@@ -1,45 +1,130 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
-import { useDemo, DEMO_PILLARS, DEMO_CYCLES } from "@/hooks/useDemo";
 import { supabase } from "@/integrations/supabase/client";
 import { Layout } from "@/components/Layout";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { ProgressSummaryCards } from "@/components/progress/ProgressSummaryCards";
+import { ActivitySection } from "@/components/progress/ActivitySection";
+import { WeeklyCompletionChart } from "@/components/progress/WeeklyCompletionChart";
+import { PillarLevelCards } from "@/components/progress/PillarLevelCards";
+import { PillarCompletionChart } from "@/components/progress/PillarCompletionChart";
+import { PlanSummaryStrip } from "@/components/progress/PlanSummaryStrip";
+import { Loader2 } from "lucide-react";
+import { Tables } from "@/integrations/supabase/types";
+
+type LearningPlan = Tables<"learning_plans">;
+type PlanBlock = Tables<"plan_blocks">;
+type PlanTask = Tables<"plan_tasks">;
+type UserProgress = Tables<"user_progress">;
+type Pillar = Tables<"pillars">;
+
+interface PlanOutline {
+  total_weeks: number;
+  weeks: { week_number: number; pillars: { pillar_name: string; weekly_goal: string }[] }[];
+}
 
 const Progress = () => {
   const { user } = useAuth();
-  const { isDemo } = useDemo();
+  const userId = user?.id;
 
+  // Active learning plan
+  const { data: plan, isLoading: planLoading } = useQuery({
+    queryKey: ["learning-plan", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("learning_plans")
+        .select("*")
+        .eq("user_id", userId!)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (error) throw error;
+      return data as LearningPlan | null;
+    },
+    enabled: !!userId,
+  });
+
+  // Pillars
   const { data: pillars = [], isLoading: pillarsLoading } = useQuery({
-    queryKey: ["pillars", user?.id],
+    queryKey: ["pillars", userId],
     queryFn: async () => {
-      const { data } = await supabase.from("pillars").select("*").eq("user_id", user!.id).eq("is_active", true).order("sort_order");
-      return data || [];
+      const { data, error } = await supabase
+        .from("pillars")
+        .select("*")
+        .eq("user_id", userId!)
+        .eq("is_active", true)
+        .order("sort_order");
+      if (error) throw error;
+      return (data || []) as Pillar[];
     },
-    enabled: !isDemo && !!user,
-    placeholderData: isDemo ? DEMO_PILLARS : undefined,
+    enabled: !!userId,
   });
 
-  const { data: cycles = [], isLoading: cyclesLoading } = useQuery({
-    queryKey: ["cycles", user?.id],
+  // User progress (streak, day counter)
+  const { data: progress } = useQuery({
+    queryKey: ["user-progress", userId],
     queryFn: async () => {
-      const { data } = await supabase.from("cycles").select("*, pillars:pillar_id(name)").eq("user_id", user!.id).order("cycle_number", { ascending: false }).limit(20);
-      return data || [];
+      const { data, error } = await supabase
+        .from("user_progress")
+        .select("*")
+        .eq("user_id", userId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as UserProgress | null;
     },
-    enabled: !isDemo && !!user,
-    placeholderData: isDemo ? DEMO_CYCLES : undefined,
+    enabled: !!userId,
   });
 
-  const loading = pillarsLoading || cyclesLoading;
+  // All plan blocks
+  const { data: allBlocks = [] } = useQuery({
+    queryKey: ["plan-blocks-all", plan?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("plan_blocks")
+        .select("*")
+        .eq("plan_id", plan!.id);
+      if (error) throw error;
+      return (data || []) as PlanBlock[];
+    },
+    enabled: !!plan?.id,
+  });
 
-  const trendIcon = (trend: string) => {
-    if (trend === "up") return <TrendingUp className="h-4 w-4 text-success" />;
-    if (trend === "down") return <TrendingDown className="h-4 w-4 text-destructive" />;
-    return <Minus className="h-4 w-4 text-muted-foreground" />;
-  };
+  // All tasks for this plan (for charts)
+  const blockIds = useMemo(() => allBlocks.map((b) => b.id), [allBlocks]);
 
-  const completedCycles = cycles.filter((c) => c.status === "completed").length;
+  const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
+    queryKey: ["completed-tasks-progress", plan?.id],
+    queryFn: async () => {
+      // Supabase .in() has a limit, batch if needed
+      if (blockIds.length === 0) return [] as PlanTask[];
+      const { data, error } = await supabase
+        .from("plan_tasks")
+        .select("*")
+        .in("plan_block_id", blockIds);
+      if (error) throw error;
+      return (data || []) as PlanTask[];
+    },
+    enabled: blockIds.length > 0,
+  });
+
+  // Derived
+  const outline = plan?.plan_outline as unknown as PlanOutline | null;
+
+  const completedBlocks = useMemo(
+    () => allBlocks.filter((b) => b.is_completed).length,
+    [allBlocks],
+  );
+
+  const planCompletionPercent = useMemo(() => {
+    if (allBlocks.length === 0) return 0;
+    return Math.round((completedBlocks / allBlocks.length) * 100);
+  }, [completedBlocks, allBlocks]);
+
+  const completedTasks = useMemo(
+    () => allTasks.filter((t) => t.is_completed),
+    [allTasks],
+  );
+
+  const loading = planLoading || pillarsLoading || tasksLoading;
 
   if (loading) {
     return (
@@ -51,62 +136,59 @@ const Progress = () => {
     );
   }
 
+  // No plan — show minimal state
+  if (!plan || !outline) {
+    return (
+      <Layout>
+        <div className="max-w-3xl mx-auto space-y-8">
+          <h1 className="font-serif text-2xl font-bold">Progress</h1>
+          <p className="text-sm text-muted-foreground text-center py-8">
+            No active plan yet. Complete onboarding to start tracking your progress.
+          </p>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="max-w-3xl mx-auto space-y-8">
-        <div>
-          <h1 className="font-serif text-2xl font-bold">Progress</h1>
-          <p className="text-sm text-muted-foreground mt-1">{completedCycles} cycles completed</p>
-        </div>
+        <h1 className="font-serif text-2xl font-bold">Progress</h1>
 
-        <section className="space-y-4">
-          <h2 className="font-serif text-lg font-semibold">Pillars</h2>
-          <div className="grid gap-3 md:grid-cols-2">
-            {pillars.map((p) => (
-              <Card key={p.id} className="border-border">
-                <CardContent className="py-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-serif font-semibold text-sm">{p.name}</span>
-                    {trendIcon(p.trend)}
-                  </div>
-                  <div className="flex gap-0.5">
-                    {[1, 2, 3, 4, 5].map((l) => (
-                      <div key={l} className={`h-2 w-full rounded-full ${l <= p.current_level ? "bg-accent" : "bg-muted"}`} />
-                    ))}
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Level {p.current_level}/5</span>
-                    <span>Weight: {p.phase_weight}%</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
+        {/* A. Summary stats */}
+        <ProgressSummaryCards
+          totalTasksCompleted={progress?.total_tasks_completed ?? 0}
+          currentStreak={progress?.current_streak ?? 0}
+          longestStreak={progress?.longest_streak ?? 0}
+          currentDay={progress?.current_day ?? 0}
+          planCompletionPercent={planCompletionPercent}
+        />
 
-        <section className="space-y-4">
-          <h2 className="font-serif text-lg font-semibold">Recent Cycles</h2>
-          <div className="space-y-2">
-            {cycles.map((c) => (
-              <Card key={c.id} className="border-border">
-                <CardContent className="flex items-center justify-between py-3">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">Cycle {c.cycle_number}</span>
-                      <Badge variant={c.status === "completed" ? "secondary" : "outline"} className="text-[10px]">{c.status}</Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {(c as any).pillars?.name} · {c.theme || "—"}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            {cycles.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-8">No cycles yet. Start learning from the dashboard!</p>
-            )}
-          </div>
-        </section>
+        {/* B. Big streak + Activity heatmap */}
+        <ActivitySection progress={progress || null} completedTasks={completedTasks} />
+
+        {/* C. Weekly completion chart */}
+        <WeeklyCompletionChart tasks={allTasks} blocks={allBlocks} />
+
+        {/* D. Pillar levels snapshot */}
+        <PillarLevelCards pillars={pillars} />
+
+        {/* E. Completion by pillar */}
+        <PillarCompletionChart
+          tasks={allTasks}
+          blocks={allBlocks}
+          pillars={pillars.map((p) => ({ id: p.id, name: p.name }))}
+        />
+
+        {/* F. Compact plan summary */}
+        <PlanSummaryStrip
+          planOutline={outline}
+          pacingProfile={plan.pacing_profile}
+          allBlocks={allBlocks.map((b) => ({
+            week_number: b.week_number,
+            is_completed: b.is_completed,
+          }))}
+        />
       </div>
     </Layout>
   );
