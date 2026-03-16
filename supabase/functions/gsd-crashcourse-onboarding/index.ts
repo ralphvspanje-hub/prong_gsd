@@ -61,7 +61,7 @@ When ready, wrap your structured output in:
 {
   "topic": "AWS Solutions Architect Certification",
   "deadline": "YYYY-MM-DD",
-  "hours_per_day": 3,
+  "hours_per_day": 6,
   "days_per_week": 5,
   "intensity": "100_percent",
   "weak_areas": ["VPC networking", "IAM policies", "S3 storage classes"],
@@ -83,7 +83,7 @@ FIELD RULES:
 - deadline: Best estimate as YYYY-MM-DD. Calculate from relative dates. null if truly unknown.
 - hours_per_day: Required number. The actual hours per day they stated (e.g., 1.5, 3, 8). Use their exact number.
 - days_per_week: Required integer 1-7. Days per week they'll study.
-- intensity: "100_percent" if hours_per_day >= 3 or they said full-time. "adapted" otherwise.
+- intensity: "100_percent" if hours_per_day >= 6 or they said full-time. "adapted" otherwise.
 - weak_areas: Array of specific weak spots they mentioned.
 - pillars: 2-5 pillars tailored to their needs. Each with name, description, focus_areas array, starting_level (1-5).
 - plan_duration_weeks: 1-3 based on time until deadline. Default 2 if unclear.

@@ -70,7 +70,7 @@ Based on the interview format and weak areas, create 2-4 focused pillars. Exampl
 Be specific to their situation. Don't give everyone the same pillars.
 
 INTENSITY DERIVATION:
-- If hours_per_day >= 3 OR they say "100%", "full time", "all day" → "100_percent"
+- If hours_per_day >= 6 OR they say "100%", "full time", "all day" → "100_percent"
 - Otherwise → "adapted" (plan will calibrate to their stated hours)
 
 OUTPUT FORMAT:
@@ -82,7 +82,7 @@ When ready, wrap your structured output in:
   "company": "Spotify",
   "company_context": "Music streaming platform, data-heavy product decisions...",
   "interview_date": "YYYY-MM-DD",
-  "hours_per_day": 3,
+  "hours_per_day": 6,
   "days_per_week": 5,
   "intensity": "100_percent",
   "weak_areas": ["SQL window functions", "behavioral STAR method"],
@@ -107,7 +107,7 @@ FIELD RULES:
 - interview_date: Best estimate as YYYY-MM-DD. If they said "2 weeks from now", calculate from today's date. null if truly unknown.
 - hours_per_day: Required number. The actual hours per day they stated (e.g., 1.5, 3, 8). Use their exact number.
 - days_per_week: Required integer 1-7. Days per week they'll study.
-- intensity: "100_percent" if hours_per_day >= 3 or they said full-time. "adapted" otherwise.
+- intensity: "100_percent" if hours_per_day >= 6 or they said full-time. "adapted" otherwise.
 - weak_areas: Array of specific weak spots they mentioned.
 - interview_format: "technical", "behavioral", "system_design", "mixed", or "unknown".
 - interview_pillars: 2-4 pillars tailored to their needs. Each with name, description, focus_areas array, and starting_level (1-5).

@@ -619,7 +619,7 @@ async function generateBlock(
     ? profile.interview_intensity === "100_percent"
       ? profile?.hours_per_day
         ? Math.round(profile.hours_per_day * 60)
-        : 180
+        : 360
       : parseTimeCommitment(profile)
     : parseTimeCommitment(profile);
   const activePillars = params.activePillarCount || 1;
@@ -1109,7 +1109,7 @@ async function generateInterviewPlan(
     intensity === "100_percent"
       ? profile?.hours_per_day
         ? Math.round(profile.hours_per_day * 60)
-        : 180
+        : 360
       : parseTimeCommitment(profile);
 
   const pillarSummaries = pillars
@@ -1203,7 +1203,7 @@ ${contextLabel}:
 ${interviewContext}
 
 LEARNER PROFILE:
-- Intensity: ${intensity === "100_percent" ? "FULL — 3-4+ hours/day, no holding back" : `Adapted — ${dailyMinutes} minutes/day`}
+- Intensity: ${intensity === "100_percent" ? "FULL — 6-8 hours/day, no holding back. Fill every hour with meaningful work." : `Adapted — ${dailyMinutes} minutes/day`}
 - Plan duration: ${planWeeks} week${planWeeks > 1 ? "s" : ""}
 
 PILLARS:
