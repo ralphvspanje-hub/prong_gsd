@@ -1203,7 +1203,7 @@ ${contextLabel}:
 ${interviewContext}
 
 LEARNER PROFILE:
-- Intensity: ${intensity === "100_percent" ? "FULL — 6-8 hours/day, no holding back. Fill every hour with meaningful work." : `Adapted — ${dailyMinutes} minutes/day`}
+- Intensity: ${intensity === "100_percent" ? "FULL COMMITMENT — maximize every available minute. Push difficulty, pack the schedule tight, no fluff." : `Adapted — ${dailyMinutes} minutes/day`}
 - Plan duration: ${planWeeks} week${planWeeks > 1 ? "s" : ""}
 
 PILLARS:

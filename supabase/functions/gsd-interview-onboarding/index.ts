@@ -69,9 +69,11 @@ Based on the interview format and weak areas, create 2-4 focused pillars. Exampl
 
 Be specific to their situation. Don't give everyone the same pillars.
 
-INTENSITY DERIVATION:
-- If hours_per_day >= 6 OR they say "100%", "full time", "all day" → "100_percent"
-- Otherwise → "adapted" (plan will calibrate to their stated hours)
+COMMITMENT CHECK:
+Before finalizing, gauge how badly they want this. Ask something natural like "How serious are you about landing this role — is this a must-have or more of an exploration?" The answer drives intensity:
+- "100_percent" if they express strong commitment: "all in", "I need this", "100%", "whatever it takes", "badly", "must-have", "dream job", "full time", or any strong urgency/desperation
+- "adapted" if casual, exploratory, "just seeing what's out there", or lukewarm
+This is independent of hours_per_day — someone with 2 hours who's desperate gets 100_percent.
 
 OUTPUT FORMAT:
 When ready, wrap your structured output in:
@@ -82,7 +84,7 @@ When ready, wrap your structured output in:
   "company": "Spotify",
   "company_context": "Music streaming platform, data-heavy product decisions...",
   "interview_date": "YYYY-MM-DD",
-  "hours_per_day": 6,
+  "hours_per_day": 3,
   "days_per_week": 5,
   "intensity": "100_percent",
   "weak_areas": ["SQL window functions", "behavioral STAR method"],
@@ -107,7 +109,7 @@ FIELD RULES:
 - interview_date: Best estimate as YYYY-MM-DD. If they said "2 weeks from now", calculate from today's date. null if truly unknown.
 - hours_per_day: Required number. The actual hours per day they stated (e.g., 1.5, 3, 8). Use their exact number.
 - days_per_week: Required integer 1-7. Days per week they'll study.
-- intensity: "100_percent" if hours_per_day >= 6 or they said full-time. "adapted" otherwise.
+- intensity: "100_percent" if user expressed strong commitment (see COMMITMENT CHECK above). "adapted" otherwise. Independent of hours_per_day.
 - weak_areas: Array of specific weak spots they mentioned.
 - interview_format: "technical", "behavioral", "system_design", "mixed", or "unknown".
 - interview_pillars: 2-4 pillars tailored to their needs. Each with name, description, focus_areas array, and starting_level (1-5).

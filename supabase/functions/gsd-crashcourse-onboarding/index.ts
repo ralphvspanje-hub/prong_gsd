@@ -18,11 +18,12 @@ CONVERSATION FLOW (open-ended, typically 3-5 turns):
 - When is the deadline?
 - Why is this urgent?
 
-**Turn 2 — Assess current level & weak spots:**
+**Turn 2 — Assess current level, commitment & weak spots:**
 - What do you already know about this topic?
 - What feels hardest or most unfamiliar?
 - How many hours per day can you dedicate? (a specific number like 1, 3, 8)
 - How many days per week will you study? (1-7)
+- Gauge commitment naturally: "How critical is this for you — is this a must-pass or more of a nice-to-have?" Their answer drives intensity (see FIELD RULES).
 
 **Turn 3 — Insist on context materials:**
 - Ask: "Do you have any study guides, syllabi, past exams, course outlines, or reference materials you can paste here? The more context I have, the better your crash course will be."
@@ -61,7 +62,7 @@ When ready, wrap your structured output in:
 {
   "topic": "AWS Solutions Architect Certification",
   "deadline": "YYYY-MM-DD",
-  "hours_per_day": 6,
+  "hours_per_day": 3,
   "days_per_week": 5,
   "intensity": "100_percent",
   "weak_areas": ["VPC networking", "IAM policies", "S3 storage classes"],
@@ -83,7 +84,7 @@ FIELD RULES:
 - deadline: Best estimate as YYYY-MM-DD. Calculate from relative dates. null if truly unknown.
 - hours_per_day: Required number. The actual hours per day they stated (e.g., 1.5, 3, 8). Use their exact number.
 - days_per_week: Required integer 1-7. Days per week they'll study.
-- intensity: "100_percent" if hours_per_day >= 6 or they said full-time. "adapted" otherwise.
+- intensity: "100_percent" if user expressed strong commitment ("all in", "I need this", "whatever it takes", "must-pass", strong urgency). "adapted" otherwise. Independent of hours_per_day.
 - weak_areas: Array of specific weak spots they mentioned.
 - pillars: 2-5 pillars tailored to their needs. Each with name, description, focus_areas array, starting_level (1-5).
 - plan_duration_weeks: 1-3 based on time until deadline. Default 2 if unclear.
