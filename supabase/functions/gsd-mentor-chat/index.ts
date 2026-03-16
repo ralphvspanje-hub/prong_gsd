@@ -4,12 +4,21 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface PlanOutlineWeek {
   week_number: number;
-  pillars: { pillar_id?: string; pillar_name: string; weekly_goal: string; difficulty?: number }[];
+  pillars: {
+    pillar_id?: string;
+    pillar_name: string;
+    weekly_goal: string;
+    difficulty?: number;
+  }[];
 }
 
 function detectPatterns(
-  feedbacks: { checkin_feedback: any; pillar_id: string; pillar_name?: string }[],
-  progress: any
+  feedbacks: {
+    checkin_feedback: any;
+    pillar_id: string;
+    pillar_name?: string;
+  }[],
+  progress: any,
 ): string[] {
   const alerts: string[] = [];
   const difficulties = feedbacks
@@ -17,15 +26,19 @@ function detectPatterns(
     .filter(Boolean);
 
   if (difficulties.length >= 3) {
-    const hardCount = difficulties.filter((d: string) => d === "too_hard").length;
-    const easyCount = difficulties.filter((d: string) => d === "too_easy").length;
+    const hardCount = difficulties.filter(
+      (d: string) => d === "too_hard",
+    ).length;
+    const easyCount = difficulties.filter(
+      (d: string) => d === "too_easy",
+    ).length;
     if (hardCount >= 3)
       alerts.push(
-        `STRUGGLING: ${hardCount} of last ${difficulties.length} blocks rated "too hard". Consider reducing difficulty or adding foundation weeks.`
+        `STRUGGLING: ${hardCount} of last ${difficulties.length} blocks rated "too hard". Consider reducing difficulty or adding foundation weeks.`,
       );
     if (easyCount >= 3)
       alerts.push(
-        `UNDER-CHALLENGED: ${easyCount} of last ${difficulties.length} blocks rated "too easy". Consider increasing difficulty or accelerating pacing.`
+        `UNDER-CHALLENGED: ${easyCount} of last ${difficulties.length} blocks rated "too easy". Consider increasing difficulty or accelerating pacing.`,
       );
   }
 
@@ -40,11 +53,15 @@ function detectPatterns(
     }
   }
   for (const [_pid, diffs] of pillarFeedbacks) {
-    if (diffs.length >= 2 && diffs[0] === "too_hard" && diffs[1] === "too_hard") {
+    if (
+      diffs.length >= 2 &&
+      diffs[0] === "too_hard" &&
+      diffs[1] === "too_hard"
+    ) {
       const name = feedbacks.find((f) => f.pillar_id === _pid)?.pillar_name;
       if (name)
         alerts.push(
-          `PILLAR STRUGGLING: "${name}" has been rated "too hard" for 2+ consecutive blocks.`
+          `PILLAR STRUGGLING: "${name}" has been rated "too hard" for 2+ consecutive blocks.`,
         );
     }
   }
@@ -55,7 +72,7 @@ function detectPatterns(
     progress.longest_streak > 3
   ) {
     alerts.push(
-      `STREAK BROKEN: Had a ${progress.longest_streak}-day streak but currently at 0. Check in on motivation.`
+      `STREAK BROKEN: Had a ${progress.longest_streak}-day streak but currently at 0. Check in on motivation.`,
     );
   }
 
@@ -87,7 +104,7 @@ Deno.serve(async (req) => {
     });
 
     const { data: userData, error: userError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
+      authHeader.replace("Bearer ", ""),
     );
     if (userError || !userData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -100,39 +117,50 @@ Deno.serve(async (req) => {
     // Rate limiting
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     const ip = req.headers.get("x-forwarded-for") || "unknown";
-    const rateCheck = await checkRateLimit(supabaseAdmin, userId, ip, "mentor-chat");
+    const rateCheck = await checkRateLimit(
+      supabaseAdmin,
+      userId,
+      ip,
+      "mentor-chat",
+    );
     if (!rateCheck.allowed) {
-      return new Response(
-        JSON.stringify({ error: rateCheck.message }),
-        {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return new Response(JSON.stringify({ error: rateCheck.message }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const { message } = await req.json();
+    const { message, mode } = await req.json();
     if (!message || typeof message !== "string" || message.length > 2000) {
-      return new Response(
-        JSON.stringify({ error: "Invalid message" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return new Response(JSON.stringify({ error: "Invalid message" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
+
+    // Mode determines mentor personality: "interview_prep" = interview coach, default = career mentor
+    const isInterviewMode = mode === "interview_prep";
 
     // Load user context — round 1 (parallel)
     const [profileRes, pillarsRes, phasesRes, cyclesRes, planRes, progressRes] =
       await Promise.all([
-        supabase.from("user_profile").select("*").eq("user_id", userId).maybeSingle(),
+        supabase
+          .from("user_profile")
+          .select("*")
+          .eq("user_id", userId)
+          .maybeSingle(),
         supabase
           .from("pillars")
           .select("*")
           .eq("user_id", userId)
           .eq("is_active", true)
           .order("sort_order"),
-        supabase.from("phases").select("*").eq("user_id", userId).eq("is_active", true).limit(1),
+        supabase
+          .from("phases")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .limit(1),
         supabase
           .from("cycles")
           .select("*")
@@ -144,13 +172,22 @@ Deno.serve(async (req) => {
           .select("*")
           .eq("user_id", userId)
           .eq("is_active", true)
+          .eq("plan_type", isInterviewMode ? "interview_prep" : "learning")
           .limit(1)
           .maybeSingle(),
-        supabase.from("user_progress").select("*").eq("user_id", userId).maybeSingle(),
+        supabase
+          .from("user_progress")
+          .select("*")
+          .eq("user_id", userId)
+          .maybeSingle(),
       ]);
 
     const profile = profileRes.data;
-    const pillars = pillarsRes.data || [];
+    // Filter pillars by mode: interview pillars use sort_order >= 100
+    const allPillars = pillarsRes.data || [];
+    const pillars = isInterviewMode
+      ? allPillars.filter((p: any) => (p.sort_order ?? 0) >= 100)
+      : allPillars.filter((p: any) => (p.sort_order ?? 0) < 100);
     const phase = phasesRes.data?.[0];
     const recentCycles = cyclesRes.data || [];
     const plan = planRes.data;
@@ -174,9 +211,10 @@ Deno.serve(async (req) => {
 
       // Determine current week (lowest week of uncompleted blocks)
       const uncompletedBlocks = allBlocks.filter((b: any) => !b.is_completed);
-      const currentWeek = uncompletedBlocks.length > 0
-        ? Math.min(...uncompletedBlocks.map((b: any) => b.week_number))
-        : null;
+      const currentWeek =
+        uncompletedBlocks.length > 0
+          ? Math.min(...uncompletedBlocks.map((b: any) => b.week_number))
+          : null;
 
       if (currentWeek !== null) {
         const currentBlockIds = uncompletedBlocks
@@ -214,17 +252,23 @@ Deno.serve(async (req) => {
 
     if (plan) {
       planIdSection = `PLAN ID: ${plan.id}`;
-      const outline = plan.plan_outline as { total_weeks: number; weeks: PlanOutlineWeek[] } | null;
+      const outline = plan.plan_outline as {
+        total_weeks: number;
+        weeks: PlanOutlineWeek[];
+      } | null;
       const outlineWeeks = outline?.weeks || [];
 
       // Determine current week
       const uncompletedBlocks = allBlocks.filter((b: any) => !b.is_completed);
       const completedWeeks = new Set(
-        allBlocks.filter((b: any) => b.is_completed).map((b: any) => b.week_number)
+        allBlocks
+          .filter((b: any) => b.is_completed)
+          .map((b: any) => b.week_number),
       );
-      const currentWeek = uncompletedBlocks.length > 0
-        ? Math.min(...uncompletedBlocks.map((b: any) => b.week_number))
-        : null;
+      const currentWeek =
+        uncompletedBlocks.length > 0
+          ? Math.min(...uncompletedBlocks.map((b: any) => b.week_number))
+          : null;
 
       // Summarize plan outline
       const outlineSummary = outlineWeeks
@@ -238,9 +282,8 @@ Deno.serve(async (req) => {
         })
         .join("\n");
 
-      const weeksRemaining = currentWeek !== null
-        ? plan.total_weeks - currentWeek + 1
-        : 0;
+      const weeksRemaining =
+        currentWeek !== null ? plan.total_weeks - currentWeek + 1 : 0;
 
       planSection = `Total weeks: ${plan.total_weeks}, Current week: ${currentWeek ?? "all done"}, Weeks remaining: ${weeksRemaining}, Pacing: ${plan.pacing_profile}
 Plan outline:
@@ -249,27 +292,33 @@ ${outlineSummary || "  (empty)"}`;
       // Current week status
       if (currentWeek !== null) {
         const currentBlocks = uncompletedBlocks.filter(
-          (b: any) => b.week_number === currentWeek
+          (b: any) => b.week_number === currentWeek,
         );
         // Also include completed blocks from current week
         const allCurrentWeekBlocks = allBlocks.filter(
-          (b: any) => b.week_number === currentWeek
+          (b: any) => b.week_number === currentWeek,
         );
         weekStatusSection = allCurrentWeekBlocks
           .map((b: any) => {
             const pillarName = pillarMap.get(b.pillar_id) || "Unknown";
             const blockTasks = currentWeekTasks.filter(
-              (t: any) => t.plan_block_id === b.id
+              (t: any) => t.plan_block_id === b.id,
             );
-            const completedCount = blockTasks.filter((t: any) => t.is_completed).length;
+            const completedCount = blockTasks.filter(
+              (t: any) => t.is_completed,
+            ).length;
             const totalCount = blockTasks.length;
-            const pacingNote = b.pacing_note ? ` — Pacing: ${b.pacing_note}` : "";
+            const pacingNote = b.pacing_note
+              ? ` — Pacing: ${b.pacing_note}`
+              : "";
             return `- ${pillarName}: "${b.weekly_goal}" (${completedCount}/${totalCount} tasks done${b.is_completed ? ", block complete" : ""}${pacingNote})`;
           })
           .join("\n");
 
         // Task IDs for current week (uncompleted only, needed for swap_resource)
-        const uncompletedTasks = currentWeekTasks.filter((t: any) => !t.is_completed);
+        const uncompletedTasks = currentWeekTasks.filter(
+          (t: any) => !t.is_completed,
+        );
         if (uncompletedTasks.length > 0) {
           taskIdsSection = uncompletedTasks
             .map((t: any) => `- ${t.id}: "${t.action}" (${t.platform})`)
@@ -325,8 +374,49 @@ ${outlineSummary || "  (empty)"}`;
       extraContext += `\nLINKEDIN CONTEXT (user-provided):\n${profile.linkedin_context.substring(0, 1500)}\n`;
     }
 
-    // Build system prompt
-    const systemPrompt = `You are ${mentorDisplayName}, the ProngGSD career mentor — a sharp, thoughtful thinking partner focused on the user's long-term career growth. You ask before you act. Never change pillars, plan structure, or settings without explicit user confirmation.
+    // Build system prompt — persona switches based on mode
+    const interviewContext = isInterviewMode
+      ? `
+INTERVIEW CONTEXT:
+- Target Role: ${profile?.interview_target_role || "Not set"}
+- Company: ${profile?.interview_company || "Not set"}
+- Interview Date: ${profile?.interview_date || "Not set"}
+- Intensity: ${profile?.interview_intensity || "Not set"}
+- Format: ${profile?.interview_format || "Not set"}
+- Weak Areas: ${((profile?.interview_weak_areas as string[]) || []).join(", ") || "Not set"}
+${profile?.interview_company_context ? `- Company Context: ${profile.interview_company_context.substring(0, 1000)}` : ""}`
+      : "";
+
+    const mentorPersona = isInterviewMode
+      ? `You are ${mentorDisplayName}, the ProngGSD interview coach — a focused, strategic coach helping the user crush their upcoming interview. You know their target role, weak areas, timeline, and prep plan. Every response should drive toward interview readiness. Be direct, tactical, and time-aware — this is a crash course with a deadline.`
+      : `You are ${mentorDisplayName}, the ProngGSD career mentor — a sharp, thoughtful thinking partner focused on the user's long-term career growth. You ask before you act. Never change pillars, plan structure, or settings without explicit user confirmation.`;
+
+    const behaviorRules = isInterviewMode
+      ? `BEHAVIOR RULES:
+- You are an interview coach. Every answer should connect back to interview performance.
+- Reference the interview date and remaining time when relevant — create urgency without panic.
+- When discussing weak areas: be specific about what to practice and how, with concrete drills or frameworks.
+- When the user is stuck: give direct tactical advice (e.g., "For behavioral questions, always use STAR format with metrics").
+- When proposing changes: focus on what maximizes interview readiness in remaining time.
+- For mock interview feedback: reference specific patterns from their mistake journal if mentioned.
+- When proposing pacing changes: frame in terms of "days until interview" and what can realistically be covered.
+- For swap_resource: suggest interview-specific resources (mock platforms, question banks, company-specific prep).
+- If PATTERN ALERTS exist, reference them with interview urgency.
+- Keep responses focused, tactical, and interview-specific. No general career advice unless directly relevant.
+- You are not a general chatbot — stay within interview prep strategy and the user's crash course.`
+      : `BEHAVIOR RULES:
+- When the user wants to add, swap, edit, or delete pillars: ask clarifying questions first (2–4 turns), then summarize proposed changes clearly, then wait for confirmation.
+- When the user wants to change a pillar level: ask 3–5 diagnostic questions about their experience with the topic to assess their actual level, then recommend a specific level with reasoning.
+- When the user is stuck on a topic: ask what specifically is hard before proposing changes. Offer encouragement and concrete tips before resorting to plan modifications.
+- When proposing pacing changes: explain the tradeoff (faster = more daily work, shorter timeline; slower = less per day, longer timeline).
+- When proposing plan restructuring: summarize what will change clearly (which weeks are affected, what topics move) before the PROPOSED_CHANGES block.
+- For swap_resource: suggest a specific alternative platform or resource with reasoning, using the exact task_id from CURRENT TASK IDS.
+- If PATTERN ALERTS exist, proactively reference them in conversation (e.g., "I notice you've rated the last few blocks as too hard — want me to add a foundations week?").
+- When discussing career direction: be honest, curious, and specific. Reference their actual goals, pillars, and plan progress.
+- Keep responses focused and actionable. No filler.
+- You are not a general chatbot — stay within career growth, learning strategy, and the user's ProngGSD setup.`;
+
+    const systemPrompt = `${mentorPersona}
 
 USER PROFILE:
 - Name: ${profile?.name || "Unknown"}
@@ -336,7 +426,7 @@ USER PROFILE:
 - Pacing Profile: ${profile?.pacing_profile || "Not set"}
 - Time Commitment: ${profile?.time_commitment || "Not set"}
 - Job Situation: ${profile?.job_situation || "Not set"}${profile?.job_timeline_weeks ? ` (${profile.job_timeline_weeks} weeks)` : ""}
-${extraContext}
+${extraContext}${interviewContext}
 ACTIVE PILLARS:
 ${pillars.map((p: any) => `- ${p.name} (Level ${p.current_level}/5, Weight: ${p.phase_weight || 0}%, Trend: ${p.trend || "stable"}, Blocks at level: ${p.blocks_completed_at_level || 0})`).join("\n") || "None"}
 
@@ -357,17 +447,7 @@ ${progressSection}
 ${feedbackSection ? `\nRECENT CHECK-IN FEEDBACK:\n${feedbackSection}` : ""}
 ${patternSection ? `\nPATTERN ALERTS:\n${patternSection}` : ""}
 
-BEHAVIOR RULES:
-- When the user wants to add, swap, edit, or delete pillars: ask clarifying questions first (2–4 turns), then summarize proposed changes clearly, then wait for confirmation.
-- When the user wants to change a pillar level: ask 3–5 diagnostic questions about their experience with the topic to assess their actual level, then recommend a specific level with reasoning.
-- When the user is stuck on a topic: ask what specifically is hard before proposing changes. Offer encouragement and concrete tips before resorting to plan modifications.
-- When proposing pacing changes: explain the tradeoff (faster = more daily work, shorter timeline; slower = less per day, longer timeline).
-- When proposing plan restructuring: summarize what will change clearly (which weeks are affected, what topics move) before the PROPOSED_CHANGES block.
-- For swap_resource: suggest a specific alternative platform or resource with reasoning, using the exact task_id from CURRENT TASK IDS.
-- If PATTERN ALERTS exist, proactively reference them in conversation (e.g., "I notice you've rated the last few blocks as too hard — want me to add a foundations week?").
-- When discussing career direction: be honest, curious, and specific. Reference their actual goals, pillars, and plan progress.
-- Keep responses focused and actionable. No filler.
-- You are not a general chatbot — stay within career growth, learning strategy, and the user's ProngGSD setup.
+${behaviorRules}
 - When you propose changes, always end your confirmation message with a PROPOSED_CHANGES block so the app can parse and apply it.
 - You can propose multiple actions at once by using an array in PROPOSED_CHANGES.
 
@@ -429,7 +509,7 @@ ${pillars.map((p: any) => `- ${p.name}: ${p.id}`).join("\n") || "None"}`;
           contents,
           generationConfig: { maxOutputTokens: 3072, temperature: 0.7 },
         }),
-      }
+      },
     );
 
     if (!aiResponse.ok) {
@@ -442,7 +522,7 @@ ${pillars.map((p: any) => `- ${p.name}: ${p.id}`).join("\n") || "None"}`;
           {
             status: 429,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          },
         );
       }
       const errText = await aiResponse.text();

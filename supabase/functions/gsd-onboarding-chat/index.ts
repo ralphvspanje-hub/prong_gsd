@@ -107,7 +107,8 @@ When you have enough information to build the architecture, wrap your final stru
     "github_familiar": null,
     "has_ide": null,
     "used_practice_platforms": null
-  }
+  },
+  "primary_focus": "interview_prep" | "long_term_learning"
 }
 [/ONBOARDING_COMPLETE]
 
@@ -126,6 +127,20 @@ NEW FIELD RULES:
 - job_situation: Required. One of "interviewing", "career_switch", "growing", "exploring".
 - job_timeline_weeks: Number of weeks until deadline, or null if no deadline.
 - tool_setup: For technical learners, fill in booleans based on what you learned. For non-technical learners, leave all values as null.
+- primary_focus: Required. Either "interview_prep" or "long_term_learning". See PRIMARY FOCUS DETECTION rules above.
+
+PRIMARY FOCUS DETECTION:
+Based on the full conversation, determine the user's primary focus:
+- Set to "interview_prep" ONLY when ALL of these are true:
+  1. The user's PRIMARY stated goal is preparing for specific upcoming interviews
+  2. Their timeline is 3 weeks or less
+  3. Interview preparation dominated the conversation (not mentioned casually alongside other goals)
+- Set to "long_term_learning" in ALL other cases, including:
+  - User mentions interviewing but also wants general career growth
+  - Timeline is longer than 3 weeks
+  - Interview prep is secondary to skill building
+  - User is exploring or career switching, even if they mention interviews
+Be conservative. When in doubt, default to "long_term_learning". It's better to let a user manually start interview prep than to force them into it when they wanted a full learning plan.
 
 Include your conversational message BEFORE the [ONBOARDING_COMPLETE] block. The message should summarize what you've learned and present the architecture with enthusiasm.`;
 
@@ -158,7 +173,7 @@ Deno.serve(async (req) => {
     });
 
     const { data: userData, error: userError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
+      authHeader.replace("Bearer ", ""),
     );
     if (userError || !userData?.user) {
       return jsonRes({ error: "Unauthorized" }, 401);
@@ -167,7 +182,12 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     const ip = req.headers.get("x-forwarded-for") || "unknown";
-    const rateCheck = await checkRateLimit(supabaseAdmin, userId, ip, "onboarding-chat");
+    const rateCheck = await checkRateLimit(
+      supabaseAdmin,
+      userId,
+      ip,
+      "onboarding-chat",
+    );
     if (!rateCheck.allowed) {
       return jsonRes({ error: rateCheck.message }, 429);
     }
@@ -175,7 +195,10 @@ Deno.serve(async (req) => {
     const { action, messages } = await req.json();
 
     if (!["start", "continue"].includes(action)) {
-      return jsonRes({ error: "Invalid action. Must be: start, continue" }, 400);
+      return jsonRes(
+        { error: "Invalid action. Must be: start, continue" },
+        400,
+      );
     }
 
     if (action === "continue" && (!messages || messages.length === 0)) {
@@ -199,7 +222,9 @@ Deno.serve(async (req) => {
       .eq("user_id", userId)
       .maybeSingle();
 
-    const turnCount = (messages || []).filter((m: any) => m.role === "user").length;
+    const turnCount = (messages || []).filter(
+      (m: any) => m.role === "user",
+    ).length;
     let systemPrompt = ONBOARDING_SYSTEM_PROMPT;
     const todayStr = new Date().toISOString().split("T")[0];
     systemPrompt += `\n\nToday's date is ${todayStr}. Use this as the starting point for all phase timelines.`;
@@ -212,7 +237,8 @@ Deno.serve(async (req) => {
     }
 
     if (turnCount >= 10) {
-      systemPrompt += "\n\nIMPORTANT: The conversation has gone on for a while. If you have enough information, wrap up and produce the [ONBOARDING_COMPLETE] output now. If you still need critical information, ask one final focused question.";
+      systemPrompt +=
+        "\n\nIMPORTANT: The conversation has gone on for a while. If you have enough information, wrap up and produce the [ONBOARDING_COMPLETE] output now. If you still need critical information, ask one final focused question.";
     }
 
     const contents: { role: string; parts: { text: string }[] }[] = [];
@@ -220,7 +246,11 @@ Deno.serve(async (req) => {
     if (action === "start") {
       contents.push({
         role: "user",
-        parts: [{ text: "I just started the onboarding. Please introduce yourself and begin." }],
+        parts: [
+          {
+            text: "I just started the onboarding. Please introduce yourself and begin.",
+          },
+        ],
       });
     } else {
       for (const msg of messages || []) {
@@ -244,22 +274,29 @@ Deno.serve(async (req) => {
           contents,
           generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
         }),
-      }
+      },
     );
 
     if (!aiResponse.ok) {
       if (aiResponse.status === 429) {
-        return jsonRes({ error: "The AI service is temporarily unavailable due to high demand. Please try again in a few minutes." }, 429);
+        return jsonRes(
+          {
+            error:
+              "The AI service is temporarily unavailable due to high demand. Please try again in a few minutes.",
+          },
+          429,
+        );
       }
       const errText = await aiResponse.text();
       throw new Error(`AI API error: ${aiResponse.status} ${errText}`);
     }
 
     const aiData = await aiResponse.json();
-    const fullContent: string = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const fullContent: string =
+      aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     const completeMatch = fullContent.match(
-      /\[ONBOARDING_COMPLETE\]\s*([\s\S]*?)\s*\[\/ONBOARDING_COMPLETE\]/
+      /\[ONBOARDING_COMPLETE\]\s*([\s\S]*?)\s*\[\/ONBOARDING_COMPLETE\]/,
     );
 
     // Server-side guard: strip premature completion if under minimum turns
@@ -268,7 +305,9 @@ Deno.serve(async (req) => {
         .replace(/\[ONBOARDING_COMPLETE\][\s\S]*?\[\/ONBOARDING_COMPLETE\]/, "")
         .trim();
       return jsonRes({
-        message: strippedContent || "I'd love to learn more about you before we build your plan. Let's keep going!",
+        message:
+          strippedContent ||
+          "I'd love to learn more about you before we build your plan. Let's keep going!",
       });
     }
 
@@ -280,7 +319,9 @@ Deno.serve(async (req) => {
       try {
         const outputs = JSON.parse(completeMatch[1]);
         return jsonRes({
-          message: messageBeforeBlock || "Here's your personalized learning architecture!",
+          message:
+            messageBeforeBlock ||
+            "Here's your personalized learning architecture!",
           outputs,
         });
       } catch {

@@ -15,6 +15,7 @@ import History from "./pages/History";
 import SettingsPage from "./pages/SettingsPage";
 import Mentor from "./pages/Mentor";
 import PlanOverview from "./pages/PlanOverview";
+import InterviewDashboard from "./pages/InterviewDashboard";
 import InterviewOnboarding from "./pages/InterviewOnboarding";
 import MockInterview from "./pages/MockInterview";
 import About from "./pages/About";
@@ -97,6 +98,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <Onboarding />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/interview-dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <InterviewDashboard />
                     </ProtectedRoute>
                   }
                 />

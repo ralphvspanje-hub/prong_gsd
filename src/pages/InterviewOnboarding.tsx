@@ -395,7 +395,7 @@ const InterviewOnboarding = () => {
 
       localStorage.setItem("pronggsd-dashboard-view", "interview_prep");
       toast.success("Interview prep is ready! Let's crush this.");
-      navigate("/dashboard");
+      navigate("/interview-dashboard");
     } catch (err: any) {
       toast.error("Failed to save: " + err.message);
     }

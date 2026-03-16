@@ -3,12 +3,33 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Send, Loader2, Zap, ChevronDown, Check, RotateCcw } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+import {
+  Send,
+  Loader2,
+  Zap,
+  ChevronDown,
+  Check,
+  RotateCcw,
+} from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -51,6 +72,7 @@ interface OnboardingOutputs {
   job_situation?: string;
   job_timeline_weeks?: number | null;
   tool_setup?: Record<string, boolean | null>;
+  primary_focus?: string; // "interview_prep" | "long_term_learning"
 }
 
 const MAX_ONBOARDING_MSG_LENGTH = 3000;
@@ -71,12 +93,16 @@ const Onboarding = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const startedRef = useRef(false);
-  const isOwner = user?.email?.toLowerCase() === import.meta.env.VITE_OWNER_EMAIL?.toLowerCase();
+  const isOwner =
+    user?.email?.toLowerCase() ===
+    import.meta.env.VITE_OWNER_EMAIL?.toLowerCase();
 
   const handleAdminReset = async () => {
     if (!window.confirm("Reset all data and start over?")) return;
     try {
-      const { data: { session: s } } = await supabase.auth.getSession();
+      const {
+        data: { session: s },
+      } = await supabase.auth.getSession();
       await supabase.functions.invoke("gsd-reset-user-data", {
         body: { mode: "full" },
         headers: { Authorization: `Bearer ${s?.access_token}` },
@@ -114,9 +140,12 @@ const Onboarding = () => {
   const startConversation = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("gsd-onboarding-chat", {
-        body: { messages: [], action: "start" },
-      });
+      const { data, error } = await supabase.functions.invoke(
+        "gsd-onboarding-chat",
+        {
+          body: { messages: [], action: "start" },
+        },
+      );
       if (error) {
         let msg = error.message;
         try {
@@ -143,19 +172,27 @@ const Onboarding = () => {
     if (!input.trim() || loading) return;
     const userMessage = input.trim();
     if (userMessage.length > MAX_ONBOARDING_MSG_LENGTH) {
-      toast.error(`Message too long. Max ${MAX_ONBOARDING_MSG_LENGTH} characters.`);
+      toast.error(
+        `Message too long. Max ${MAX_ONBOARDING_MSG_LENGTH} characters.`,
+      );
       return;
     }
     setInput("");
     if (inputRef.current) inputRef.current.style.height = "auto";
-    const newMessages = [...messages, { role: "user" as const, content: userMessage }];
+    const newMessages = [
+      ...messages,
+      { role: "user" as const, content: userMessage },
+    ];
     setMessages(newMessages);
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("gsd-onboarding-chat", {
-        body: { messages: newMessages, action: "continue" },
-      });
+      const { data, error } = await supabase.functions.invoke(
+        "gsd-onboarding-chat",
+        {
+          body: { messages: newMessages, action: "continue" },
+        },
+      );
       if (error) {
         let msg = error.message;
         try {
@@ -168,15 +205,30 @@ const Onboarding = () => {
       if (data.outputs) {
         setOutputs(data.outputs);
         setPhase("review");
-        setMessages([...newMessages, { role: "assistant", content: data.message || "Here's what I've prepared for you:" }]);
+        setMessages([
+          ...newMessages,
+          {
+            role: "assistant",
+            content: data.message || "Here's what I've prepared for you:",
+          },
+        ]);
       } else if (data.message) {
-        setMessages([...newMessages, { role: "assistant", content: data.message }]);
+        setMessages([
+          ...newMessages,
+          { role: "assistant", content: data.message },
+        ]);
       }
 
-      await supabase.from("onboarding_conversations").update({
-        messages: [...newMessages, { role: "assistant", content: data.message }],
-        status: data.outputs ? "completed" : "in_progress",
-      }).eq("user_id", user!.id);
+      await supabase
+        .from("onboarding_conversations")
+        .update({
+          messages: [
+            ...newMessages,
+            { role: "assistant", content: data.message },
+          ],
+          status: data.outputs ? "completed" : "in_progress",
+        })
+        .eq("user_id", user!.id);
     } catch (err: any) {
       toast.error("Failed to send message: " + err.message);
     }
@@ -186,6 +238,31 @@ const Onboarding = () => {
 
   const handleConfirm = async () => {
     if (!outputs || !user) return;
+
+    // Interview prep detection: route to dedicated flow if primary focus is interview prep
+    if (
+      outputs.primary_focus === "interview_prep" &&
+      outputs.job_timeline_weeks != null &&
+      outputs.job_timeline_weeks <= 3
+    ) {
+      // Save basic profile data so it persists
+      await supabase.from("user_profile").upsert({
+        user_id: user.id,
+        name: user.email?.split("@")[0] || "Learner",
+        job_situation: outputs.job_situation || "interviewing",
+        job_timeline_weeks: outputs.job_timeline_weeks,
+      });
+      // Mark onboarding as completed
+      await supabase
+        .from("onboarding_conversations")
+        .update({ status: "completed" })
+        .eq("user_id", user.id);
+
+      toast.info("Looks like you need interview prep! Let's set that up.");
+      navigate("/interview-onboarding");
+      return;
+    }
+
     setSaving(true);
     try {
       await supabase.from("user_profile").upsert({
@@ -201,15 +278,19 @@ const Onboarding = () => {
 
       for (let i = 0; i < outputs.pillars.length; i++) {
         const p = outputs.pillars[i];
-        const { data: pillarData } = await supabase.from("pillars").insert({
-          user_id: user.id,
-          name: p.name,
-          description: p.description,
-          why_it_matters: p.why_it_matters,
-          starting_level: p.starting_level,
-          current_level: p.starting_level,
-          sort_order: i,
-        }).select().single();
+        const { data: pillarData } = await supabase
+          .from("pillars")
+          .insert({
+            user_id: user.id,
+            name: p.name,
+            description: p.description,
+            why_it_matters: p.why_it_matters,
+            starting_level: p.starting_level,
+            current_level: p.starting_level,
+            sort_order: i,
+          })
+          .select()
+          .single();
 
         if (pillarData) {
           const topics = outputs.topicMap.filter((t) => t.pillar === p.name);
@@ -238,17 +319,25 @@ const Onboarding = () => {
         });
       }
 
-      await supabase.from("onboarding_conversations").update({ status: "completed" }).eq("user_id", user.id);
+      await supabase
+        .from("onboarding_conversations")
+        .update({ status: "completed" })
+        .eq("user_id", user.id);
 
       // Generate the multi-week learning plan
       setSavingMessage("Building your personalized plan...");
-      const { error: planError } = await supabase.functions.invoke("gsd-generate-plan", {
-        body: { mode: "full_plan" },
-      });
+      const { error: planError } = await supabase.functions.invoke(
+        "gsd-generate-plan",
+        {
+          body: { mode: "full_plan" },
+        },
+      );
 
       if (planError) {
         console.error("Plan generation failed:", planError);
-        toast.error("Profile saved, but plan generation failed. Please try again.");
+        toast.error(
+          "Profile saved, but plan generation failed. Please try again.",
+        );
         setSaving(false);
         return;
       }
@@ -271,11 +360,18 @@ const Onboarding = () => {
           </div>
           <div className="flex items-center gap-3">
             {isOwner && (
-              <button onClick={handleAdminReset} className="text-xs text-muted-foreground hover:text-destructive transition-colors" title="Reset all data">
+              <button
+                onClick={handleAdminReset}
+                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                title="Reset all data"
+              >
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>
             )}
-            <button onClick={signOut} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <button
+              onClick={signOut}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
               Sign out
             </button>
           </div>
@@ -295,7 +391,9 @@ const Onboarding = () => {
                     className="flex flex-col items-center justify-center py-16 gap-3 text-center"
                   >
                     <Loader2 className="h-6 w-6 animate-spin text-accent" />
-                    <p className="text-base text-muted-foreground">Your mentor is getting ready...</p>
+                    <p className="text-base text-muted-foreground">
+                      Your mentor is getting ready...
+                    </p>
                   </motion.div>
                 )}
 
@@ -308,20 +406,38 @@ const Onboarding = () => {
                       transition={{ duration: 0.3 }}
                       className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                     >
-                      <div className={`max-w-[85%] rounded-lg px-4 py-3 text-base leading-relaxed ${
-                        msg.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-card text-card-foreground border border-border"
-                      }`}>
+                      <div
+                        className={`max-w-[85%] rounded-lg px-4 py-3 text-base leading-relaxed ${
+                          msg.role === "user"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-card text-card-foreground border border-border"
+                        }`}
+                      >
                         {msg.role === "assistant" ? (
                           <ReactMarkdown
                             components={{
-                              p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                              p: ({ children }) => (
+                                <p className="mb-3 last:mb-0">{children}</p>
+                              ),
+                              strong: ({ children }) => (
+                                <strong className="font-semibold">
+                                  {children}
+                                </strong>
+                              ),
                               hr: () => <hr className="my-3 border-border" />,
-                              ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1">{children}</ol>,
-                              ul: ({ children }) => <ul className="list-disc pl-5 space-y-1">{children}</ul>,
-                              li: ({ children }) => <li className="pl-0.5">{children}</li>,
+                              ol: ({ children }) => (
+                                <ol className="list-decimal pl-5 space-y-1">
+                                  {children}
+                                </ol>
+                              ),
+                              ul: ({ children }) => (
+                                <ul className="list-disc pl-5 space-y-1">
+                                  {children}
+                                </ul>
+                              ),
+                              li: ({ children }) => (
+                                <li className="pl-0.5">{children}</li>
+                              ),
                             }}
                           >
                             {msg.content}
@@ -335,7 +451,11 @@ const Onboarding = () => {
                 </AnimatePresence>
                 {/* Typing indicator — shown while waiting for a reply (not during initial load) */}
                 {loading && messages.length > 0 && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex justify-start"
+                  >
                     <div className="bg-card border border-border rounded-lg px-4 py-3">
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     </div>
@@ -352,10 +472,18 @@ const Onboarding = () => {
                     <textarea
                       ref={inputRef}
                       value={input}
-                      onChange={(e) => setInput(e.target.value.slice(0, MAX_ONBOARDING_MSG_LENGTH))}
+                      onChange={(e) =>
+                        setInput(
+                          e.target.value.slice(0, MAX_ONBOARDING_MSG_LENGTH),
+                        )
+                      }
                       onInput={handleTextareaInput}
                       onKeyDown={handleKeyDown}
-                      placeholder={messages.length === 0 ? "Waiting for your mentor..." : "Tell me about your goals..."}
+                      placeholder={
+                        messages.length === 0
+                          ? "Waiting for your mentor..."
+                          : "Tell me about your goals..."
+                      }
                       disabled={loading || messages.length === 0}
                       rows={1}
                       className={`${TEXTAREA_BASE} min-h-[80px] max-h-[200px] px-4 pt-5 pb-3`}
@@ -392,32 +520,55 @@ const Onboarding = () => {
         {phase === "review" && outputs && (
           <div className="space-y-8">
             <div className="text-center space-y-2">
-              <h1 className="font-serif text-3xl font-bold">Your Learning Blueprint</h1>
-              <p className="text-muted-foreground">Review and confirm your personalized learning plan.</p>
+              <h1 className="font-serif text-3xl font-bold">
+                Your Learning Blueprint
+              </h1>
+              <p className="text-muted-foreground">
+                Review and confirm your personalized learning plan.
+              </p>
             </div>
 
             <section className="space-y-4">
-              <h2 className="font-serif text-xl font-semibold">Strategic Pillars</h2>
+              <h2 className="font-serif text-xl font-semibold">
+                Strategic Pillars
+              </h2>
               <div className="grid gap-4 md:grid-cols-2">
                 {outputs.pillars.map((p, i) => (
                   <Card key={i} className="border-border">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-base font-serif">{p.name}</CardTitle>
-                      <CardDescription className="text-sm">{p.description}</CardDescription>
+                      <CardTitle className="text-base font-serif">
+                        {p.name}
+                      </CardTitle>
+                      <CardDescription className="text-sm">
+                        {p.description}
+                      </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                      <p className="text-sm text-muted-foreground">{p.why_it_matters}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {p.why_it_matters}
+                      </p>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">Level:</span>
+                        <span className="text-sm text-muted-foreground">
+                          Level:
+                        </span>
                         <div className="flex gap-1">
                           {[1, 2, 3, 4, 5].map((l) => (
-                            <div key={l} className={`h-2 w-2 rounded-full ${l <= p.starting_level ? "bg-accent" : "bg-muted"}`} />
+                            <div
+                              key={l}
+                              className={`h-2 w-2 rounded-full ${l <= p.starting_level ? "bg-accent" : "bg-muted"}`}
+                            />
                           ))}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-1">
                         {p.key_topics?.map((t, j) => (
-                          <Badge key={j} variant="secondary" className="text-xs">{t}</Badge>
+                          <Badge
+                            key={j}
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            {t}
+                          </Badge>
                         ))}
                       </div>
                     </CardContent>
@@ -427,23 +578,38 @@ const Onboarding = () => {
             </section>
 
             <section className="space-y-4">
-              <h2 className="font-serif text-xl font-semibold">Career Phases</h2>
+              <h2 className="font-serif text-xl font-semibold">
+                Career Phases
+              </h2>
               <div className="space-y-3">
                 {outputs.phases.map((ph, i) => (
                   <Card key={i} className="border-border">
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-base font-serif">{ph.name}</CardTitle>
-                        <span className="text-sm text-muted-foreground">{ph.timeline_start} → {ph.timeline_end}</span>
+                        <CardTitle className="text-base font-serif">
+                          {ph.name}
+                        </CardTitle>
+                        <span className="text-sm text-muted-foreground">
+                          {ph.timeline_start} → {ph.timeline_end}
+                        </span>
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-sm text-muted-foreground mb-2">{ph.goal}</p>
+                      <p className="text-sm text-muted-foreground mb-2">
+                        {ph.goal}
+                      </p>
                       {ph.weights && (
                         <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-muted">
-                          {Object.entries(ph.weights).map(([name, weight], j) => (
-                            <div key={j} className="bg-accent/70 first:rounded-l-full last:rounded-r-full" style={{ width: `${weight}%` }} title={`${name}: ${weight}%`} />
-                          ))}
+                          {Object.entries(ph.weights).map(
+                            ([name, weight], j) => (
+                              <div
+                                key={j}
+                                className="bg-accent/70 first:rounded-l-full last:rounded-r-full"
+                                style={{ width: `${weight}%` }}
+                                title={`${name}: ${weight}%`}
+                              />
+                            ),
+                          )}
                         </div>
                       )}
                     </CardContent>
@@ -455,20 +621,35 @@ const Onboarding = () => {
             <section className="space-y-4">
               <h2 className="font-serif text-xl font-semibold">Topic Map</h2>
               {outputs.pillars.map((p, i) => {
-                const topics = outputs.topicMap.filter((t) => t.pillar === p.name);
+                const topics = outputs.topicMap.filter(
+                  (t) => t.pillar === p.name,
+                );
                 return (
                   <Collapsible key={i}>
                     <CollapsibleTrigger className="flex items-center justify-between w-full p-3 bg-card border border-border rounded-lg hover:bg-secondary transition-colors">
-                      <span className="font-serif text-base font-medium">{p.name}</span>
+                      <span className="font-serif text-base font-medium">
+                        {p.name}
+                      </span>
                       <ChevronDown className="h-4 w-4 text-muted-foreground" />
                     </CollapsibleTrigger>
                     <CollapsibleContent className="mt-1 space-y-1">
                       {topics.map((t, j) => (
-                        <div key={j} className="pl-4 py-2 border-l-2 border-border ml-4">
-                          <span className="text-base font-medium">{t.cluster_name}</span>
+                        <div
+                          key={j}
+                          className="pl-4 py-2 border-l-2 border-border ml-4"
+                        >
+                          <span className="text-base font-medium">
+                            {t.cluster_name}
+                          </span>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {t.subtopics.map((s, k) => (
-                              <Badge key={k} variant="outline" className="text-xs">{s}</Badge>
+                              <Badge
+                                key={k}
+                                variant="outline"
+                                className="text-xs"
+                              >
+                                {s}
+                              </Badge>
                             ))}
                           </div>
                         </div>
@@ -480,8 +661,14 @@ const Onboarding = () => {
             </section>
 
             <div className="flex gap-3 justify-center pt-4 pb-8">
-              <Button variant="outline" onClick={() => setPhase("chat")}>Adjust Something</Button>
-              <Button onClick={handleConfirm} disabled={saving} className="gap-2">
+              <Button variant="outline" onClick={() => setPhase("chat")}>
+                Adjust Something
+              </Button>
+              <Button
+                onClick={handleConfirm}
+                disabled={saving}
+                className="gap-2"
+              >
                 {saving ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />

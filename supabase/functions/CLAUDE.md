@@ -1,24 +1,25 @@
 # supabase/functions/ — Agent Context
 
-## _shared/
+## \_shared/
 
 Shared Deno modules imported by multiple edge functions.
 
-| Module | Export | Used by |
-|--------|--------|---------|
+| Module         | Export           | Used by                                                           |
+| -------------- | ---------------- | ----------------------------------------------------------------- |
 | `rateLimit.ts` | `checkRateLimit` | mentor-chat, generate-plan, onboarding-chat, interview-onboarding |
-| `cors.ts` | `getCorsHeaders` | all 7 functions |
+| `cors.ts`      | `getCorsHeaders` | all 7 functions                                                   |
 
 Rate limits: 50 calls/user/day (500 for owner via `OWNER_EMAIL` env var), 100 calls/IP/day per endpoint. Auto-cleans rows older than 48h from `api_rate_limits`.
 
 ## mentor-chat
 
-AI mentor conversation endpoint. Phase 6 updated to be plan-aware.
+AI mentor conversation endpoint. Phase 6 updated to be plan-aware. Phase 9.4 added mode-based persona switching.
 
 - **Auth**: Bearer JWT → `supabase.auth.getUser()` for user ID
 - **Rate limits**: 50 calls/user/day, 100 calls/IP/day via `api_rate_limits` table. Old rows (>48h) auto-cleaned.
+- **Mode param**: Optional `mode` in request body (`"learning"` or `"interview_prep"`). Defaults to learning. When `"interview_prep"`: uses interview coach persona, filters pillars to `sort_order >= 100`, filters plan to `interview_prep` type, adds INTERVIEW CONTEXT section with date/company/weak areas, uses interview-focused behavior rules.
 - **Context loaded** (two rounds):
-  - Round 1 (parallel): user_profile, active pillars, active phase, last 3 cycles, active learning_plan, user_progress
+  - Round 1 (parallel): user_profile, active pillars (filtered by mode), active phase, last 3 cycles, active learning_plan (filtered by plan_type matching mode), user_progress
   - Round 2: plan_blocks for active plan, plan_tasks for current week's uncompleted blocks, last 30 conversation messages
 - **AI model**: `gemini-3.1-flash-lite` via Google Generative AI REST API
 - **Env vars**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`
@@ -45,18 +46,18 @@ Applies pillar and plan mutations proposed by the mentor. Phase 6 added plan-awa
 - **Shared helpers**: `getActivePlan()`, `getCurrentWeek()`, `cleanupFutureBlocks()`, `updateOutlinePillar()`
 - **Actions**:
 
-| Action | What it does |
-|--------|-------------|
-| `add_pillar` | Insert pillar + topic clusters, auto-increment sort_order. **Phase 6**: also adds pillar to future weeks in plan_outline and deletes uncompleted future blocks for regeneration |
-| `delete_pillar` | Delete pillar + its topic_map + phase_weights. **Phase 6**: also deletes pillar's uncompleted plan_blocks/tasks and removes from plan_outline |
-| `edit_pillar` | Update pillar fields. **Whitelist**: `name`, `description`, `why_it_matters`, `phase_weight` only |
-| `swap_pillar` | Delete one pillar, add another (combines enhanced delete + add). **Phase 6**: includes plan cleanup for both old and new pillar |
-| `change_level` | Set `current_level` on a pillar (clamped 1–5). Resets `blocks_completed_at_level` to 0 |
-| `full_recalibration` | Returns `{ redirect: "/onboarding" }` — no DB changes, client handles redirect |
-| `adjust_pacing` | Updates `user_profile.pacing_profile` + `learning_plans.pacing_profile`. Validates: aggressive, steady, exploratory |
-| `restructure_plan` | Replaces future weeks in `plan_outline` JSONB, updates `total_weeks`, deletes uncompleted future blocks. Validates no past/current week modifications |
-| `swap_resource` | Updates a single uncompleted plan_task with new action/platform/resource. Whitelist: `action`, `platform`, `resource_type`, `url`, `search_query`, `why_text`, `estimated_time_minutes` |
-| `regenerate_upcoming` | Deletes all uncompleted blocks after current week (and their tasks). Dashboard regenerates on-demand via normal flow |
+| Action                | What it does                                                                                                                                                                            |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `add_pillar`          | Insert pillar + topic clusters, auto-increment sort_order. **Phase 6**: also adds pillar to future weeks in plan_outline and deletes uncompleted future blocks for regeneration         |
+| `delete_pillar`       | Delete pillar + its topic_map + phase_weights. **Phase 6**: also deletes pillar's uncompleted plan_blocks/tasks and removes from plan_outline                                           |
+| `edit_pillar`         | Update pillar fields. **Whitelist**: `name`, `description`, `why_it_matters`, `phase_weight` only                                                                                       |
+| `swap_pillar`         | Delete one pillar, add another (combines enhanced delete + add). **Phase 6**: includes plan cleanup for both old and new pillar                                                         |
+| `change_level`        | Set `current_level` on a pillar (clamped 1–5). Resets `blocks_completed_at_level` to 0                                                                                                  |
+| `full_recalibration`  | Returns `{ redirect: "/onboarding" }` — no DB changes, client handles redirect                                                                                                          |
+| `adjust_pacing`       | Updates `user_profile.pacing_profile` + `learning_plans.pacing_profile`. Validates: aggressive, steady, exploratory                                                                     |
+| `restructure_plan`    | Replaces future weeks in `plan_outline` JSONB, updates `total_weeks`, deletes uncompleted future blocks. Validates no past/current week modifications                                   |
+| `swap_resource`       | Updates a single uncompleted plan_task with new action/platform/resource. Whitelist: `action`, `platform`, `resource_type`, `url`, `search_query`, `why_text`, `estimated_time_minutes` |
+| `regenerate_upcoming` | Deletes all uncompleted blocks after current week (and their tasks). Dashboard regenerates on-demand via normal flow                                                                    |
 
 ## generate-plan
 
@@ -69,12 +70,12 @@ Generates multi-week learning plans, individual plan blocks, and plan extensions
 - **Token budget**: Outline mode uses 4000 tokens. Block mode scales with `time_commitment` using same TOKEN_BUDGET tiers as before (15min→1800, 30→3000, 60+→5000), adjusted per pillar based on active pillar count.
 - **JSON parsing**: Strips markdown code fences, extracts JSON between `{...}`. Retries once with stricter prompt on parse failure.
 
-| Mode | Input | What it does |
-|------|-------|-------------|
-| `full_plan` | `{ mode: "full_plan" }` | Fetches user profile, pillars, phases, topic maps → Gemini generates multi-week outline → stores in `learning_plans` → generates week 1 plan blocks for each active pillar → initializes `user_progress`. Returns `{ success, plan_id, total_weeks, warnings? }` |
-| `plan_block` | `{ mode: "plan_block", plan_id, week_number, pillar_id, weekly_goal, active_pillar_count?, difficulty_adjustment?, feedback_context? }` | Fetches pillar context, curated resources (keyword-matched), previous blocks → Gemini generates detailed block with tasks → stores in `plan_blocks` + `plan_tasks`. Optional `difficulty_adjustment` ("harder"/"easier"/"same") and `feedback_context` (user feedback string) are injected into the AI prompt to adapt difficulty. Returns `{ success, block_id }` |
-| `extend_plan` | `{ mode: "extend_plan", plan_id, additional_weeks }` | Fetches existing plan outline + completed blocks with feedback → Gemini generates additional week outlines continuing from where the user left off → appends to `plan_outline`, updates `total_weeks` → generates first new week's blocks. Returns `{ success, new_total_weeks }` |
-| `interview_plan` | `{ mode: "interview_plan" }` | Fetches interview context from user_profile + interview-specific pillars → Gemini generates 1-3 week intensive outline → stores in `learning_plans` with `plan_type: 'interview_prep'` → generates ALL weeks' blocks immediately (short plan needs full visibility). Only deactivates other `interview_prep` plans, NOT `learning` plans. Pacing: `intensive` (5-8 tasks/block). Returns `{ success, plan_id, total_weeks, warnings? }` |
+| Mode             | Input                                                                                                                                   | What it does                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `full_plan`      | `{ mode: "full_plan" }`                                                                                                                 | Fetches user profile, pillars, phases, topic maps → Gemini generates multi-week outline → stores in `learning_plans` → generates week 1 plan blocks for each active pillar → initializes `user_progress`. Returns `{ success, plan_id, total_weeks, warnings? }`                                                                                                                                                                        |
+| `plan_block`     | `{ mode: "plan_block", plan_id, week_number, pillar_id, weekly_goal, active_pillar_count?, difficulty_adjustment?, feedback_context? }` | Fetches pillar context, curated resources (keyword-matched), previous blocks → Gemini generates detailed block with tasks → stores in `plan_blocks` + `plan_tasks`. Optional `difficulty_adjustment` ("harder"/"easier"/"same") and `feedback_context` (user feedback string) are injected into the AI prompt to adapt difficulty. Returns `{ success, block_id }`                                                                      |
+| `extend_plan`    | `{ mode: "extend_plan", plan_id, additional_weeks }`                                                                                    | Fetches existing plan outline + completed blocks with feedback → Gemini generates additional week outlines continuing from where the user left off → appends to `plan_outline`, updates `total_weeks` → generates first new week's blocks. Returns `{ success, new_total_weeks }`                                                                                                                                                       |
+| `interview_plan` | `{ mode: "interview_plan" }`                                                                                                            | Fetches interview context from user_profile + interview-specific pillars → Gemini generates 1-3 week intensive outline → stores in `learning_plans` with `plan_type: 'interview_prep'` → generates ALL weeks' blocks immediately (short plan needs full visibility). Only deactivates other `interview_prep` plans, NOT `learning` plans. Pacing: `intensive` (5-8 tasks/block). Returns `{ success, plan_id, total_weeks, warnings? }` |
 
 - **Resource matching**: Static keyword map from pillar name → `curated_resources.skill_area` values, filtered by level. Falls back to AI-generated search queries when no curated resources match.
 - **Level 1 primers**: When pillar level is 1, context_brief includes setup instructions based on `user_profile.tool_setup` flags.
@@ -95,15 +96,16 @@ AI-guided onboarding conversation that discovers the user's career context and b
 - **Message limits**: Max 2000 chars per user message, max 16000 chars per assistant message
 - **No DB writes** — client handles all saves to user_profile, pillars, topic_map, phases, onboarding_conversations
 
-| Action | Input | Returns |
-|--------|-------|---------|
-| `start` | `{ action: "start", messages: [] }` | `{ message }` — opening greeting |
+| Action     | Input                                     | Returns                                               |
+| ---------- | ----------------------------------------- | ----------------------------------------------------- |
+| `start`    | `{ action: "start", messages: [] }`       | `{ message }` — opening greeting                      |
 | `continue` | `{ action: "continue", messages: [...] }` | `{ message }` or `{ message, outputs }` when complete |
 
-- **Completion detection**: AI wraps final output in `[ONBOARDING_COMPLETE]...[/ONBOARDING_COMPLETE]` block containing JSON with `{ pillars, phases, topicMap, pacing_profile, time_commitment, job_situation, job_timeline_weeks, tool_setup }`. Function parses it and returns `{ message, outputs }`.
+- **Completion detection**: AI wraps final output in `[ONBOARDING_COMPLETE]...[/ONBOARDING_COMPLETE]` block containing JSON with `{ pillars, phases, topicMap, pacing_profile, time_commitment, job_situation, job_timeline_weeks, tool_setup, primary_focus }`. Function parses it and returns `{ message, outputs }`.
 - **Soft cap**: After 10 user turns, system prompt hints AI to conclude.
 - **Discovery dimensions**: Career identity, skill landscape, learning style, growth priorities, unique context, situation & urgency, practical context (time commitment, tool setup). Phase 2 added dimensions 6-7.
-- **Output shape**: `outputs.pillars[]` has `name, description, why_it_matters, starting_level, key_topics`. `outputs.phases[]` has `name, timeline_start, timeline_end, goal, weights`. `outputs.topicMap[]` has `pillar, cluster_name, subtopics, difficulty_level`. Phase 2 additions: `outputs.pacing_profile` (aggressive/steady/exploratory), `outputs.time_commitment`, `outputs.job_situation`, `outputs.job_timeline_weeks`, `outputs.tool_setup` (JSON with python_installed, github_familiar, has_ide, used_practice_platforms).
+- **Output shape**: `outputs.pillars[]` has `name, description, why_it_matters, starting_level, key_topics`. `outputs.phases[]` has `name, timeline_start, timeline_end, goal, weights`. `outputs.topicMap[]` has `pillar, cluster_name, subtopics, difficulty_level`. Phase 2 additions: `outputs.pacing_profile` (aggressive/steady/exploratory), `outputs.time_commitment`, `outputs.job_situation`, `outputs.job_timeline_weeks`, `outputs.tool_setup` (JSON with python_installed, github_familiar, has_ide, used_practice_platforms). Phase 9.3 addition: `outputs.primary_focus` ("interview_prep" or "long_term_learning") — conservative detection, defaults to long_term_learning.
+- **Primary focus detection**: When `primary_focus === "interview_prep"` AND `job_timeline_weeks <= 3`, Onboarding.tsx routes to `/interview-onboarding` instead of saving pillars/phases and generating a learning plan.
 
 ## interview-onboarding
 
@@ -117,9 +119,9 @@ Fast-track interview prep onboarding conversation (3-4 turns). Phase 9 addition.
 - **MIN_USER_TURNS**: 3 (vs 6 for main onboarding)
 - **No DB writes** — client handles all saves
 
-| Action | Input | Returns |
-|--------|-------|---------|
-| `start` | `{ action: "start", messages: [] }` | `{ message }` — opening greeting |
+| Action     | Input                                     | Returns                                               |
+| ---------- | ----------------------------------------- | ----------------------------------------------------- |
+| `start`    | `{ action: "start", messages: [] }`       | `{ message }` — opening greeting                      |
 | `continue` | `{ action: "continue", messages: [...] }` | `{ message }` or `{ message, outputs }` when complete |
 
 - **Completion detection**: AI wraps output in `[INTERVIEW_PREP_COMPLETE]...[/INTERVIEW_PREP_COMPLETE]`
@@ -139,11 +141,11 @@ AI mock interview sessions with persistent conversation state. Phase 9 Phase 2 a
 - **DB writes**: Yes — uses `supabaseAdmin` (unlike interview-onboarding which is stateless). Creates and updates `mock_interviews` rows.
 - **Message limits**: Max 2000 chars per user message
 
-| Action | Input | Returns |
-|--------|-------|---------|
-| `start` | `{ action: "start", task_id }` | `{ mock_id, message, interview_type }` — creates DB row + first AI question |
-| `continue` | `{ action: "continue", mock_id, message }` | `{ message, completed, feedback? }` — appends to conversation |
-| `complete` | `{ action: "complete", mock_id }` | `{ message, feedback, completed: true }` — forces early evaluation |
+| Action     | Input                                      | Returns                                                                     |
+| ---------- | ------------------------------------------ | --------------------------------------------------------------------------- |
+| `start`    | `{ action: "start", task_id }`             | `{ mock_id, message, interview_type }` — creates DB row + first AI question |
+| `continue` | `{ action: "continue", mock_id, message }` | `{ message, completed, feedback? }` — appends to conversation               |
+| `complete` | `{ action: "complete", mock_id }`          | `{ message, feedback, completed: true }` — forces early evaluation          |
 
 - **Interview type derivation**: Parses task action text for keywords (behavioral, sql/technical, system_design, case_study). Defaults to behavioral.
 - **System prompts**: Per-type prompts (behavioral=STAR method, technical=SQL problems, system_design=architecture, case_study=product). Common rules appended: stay in character, one question at a time, acknowledge before next.
@@ -161,9 +163,9 @@ Handles task completion analysis, streak tracking, pacing detection, pillar leve
 - **Rate limits**: 200 calls/user/day (higher than standard 50 since task completions are frequent), 100 calls/IP/day
 - **Env vars**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OWNER_EMAIL`
 
-| Event type | Input | Returns |
-|------------|-------|---------|
-| `task_complete` | `{ event_type, task_id }` | `{ success, streak, pacing_note, block_auto_complete, block_id, gap_return }` |
+| Event type       | Input                                          | Returns                                                                                                                    |
+| ---------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `task_complete`  | `{ event_type, task_id }`                      | `{ success, streak, pacing_note, block_auto_complete, block_id, gap_return }`                                              |
 | `block_complete` | `{ event_type, block_id, difficulty?, note? }` | `{ success, level_up, difficulty_adjustment, feedback_context, plan_status, next_block, plan_complete_data, nearing_end }` |
 
 - **task_complete**: Verifies task is completed, updates streak authoritatively in `user_progress` (replaces frontend streak logic), detects pacing (ahead/behind based on days since block creation), checks if block is now fully complete.

@@ -4,8 +4,21 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Send, Loader2, MessageSquare, Square, CheckCircle2, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+import {
+  Send,
+  Loader2,
+  MessageSquare,
+  Square,
+  CheckCircle2,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -83,12 +96,12 @@ const MockInterview = () => {
 
       if (error || !data) {
         toast.error("Mock interview not found");
-        navigate("/dashboard");
+        navigate("/interview-dashboard");
         return;
       }
       if (data.user_id !== userId) {
         toast.error("Unauthorized");
-        navigate("/dashboard");
+        navigate("/interview-dashboard");
         return;
       }
 
@@ -138,7 +151,10 @@ const MockInterview = () => {
       return;
     }
 
-    const updatedMessages: Message[] = [...messages, { role: "user", content: userMessage }];
+    const updatedMessages: Message[] = [
+      ...messages,
+      { role: "user", content: userMessage },
+    ];
     setMessages(updatedMessages);
     setInput("");
     setLoading(true);
@@ -149,9 +165,12 @@ const MockInterview = () => {
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke("gsd-mock-interview", {
-        body: { action: "continue", mock_id: id, message: userMessage },
-      });
+      const { data, error } = await supabase.functions.invoke(
+        "gsd-mock-interview",
+        {
+          body: { action: "continue", mock_id: id, message: userMessage },
+        },
+      );
 
       if (error || !data?.message) {
         toast.error("Failed to get response");
@@ -160,11 +179,15 @@ const MockInterview = () => {
       }
 
       // Strip completion tags from displayed message
-      const displayMessage = data.message
-        .replace(/\[INTERVIEW_COMPLETE\][\s\S]*?\[\/INTERVIEW_COMPLETE\]/, "")
-        .trim() || data.message;
+      const displayMessage =
+        data.message
+          .replace(/\[INTERVIEW_COMPLETE\][\s\S]*?\[\/INTERVIEW_COMPLETE\]/, "")
+          .trim() || data.message;
 
-      setMessages([...updatedMessages, { role: "assistant", content: displayMessage }]);
+      setMessages([
+        ...updatedMessages,
+        { role: "assistant", content: displayMessage },
+      ]);
 
       if (data.completed && data.feedback) {
         setCompleted(true);
@@ -181,9 +204,12 @@ const MockInterview = () => {
     setEnding(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("gsd-mock-interview", {
-        body: { action: "complete", mock_id: id },
-      });
+      const { data, error } = await supabase.functions.invoke(
+        "gsd-mock-interview",
+        {
+          body: { action: "complete", mock_id: id },
+        },
+      );
 
       if (error || !data) {
         toast.error("Failed to end interview");
@@ -192,10 +218,17 @@ const MockInterview = () => {
       }
 
       if (data.message) {
-        const displayMessage = data.message
-          .replace(/\[INTERVIEW_COMPLETE\][\s\S]*?\[\/INTERVIEW_COMPLETE\]/, "")
-          .trim() || data.message;
-        setMessages((prev) => [...prev, { role: "assistant", content: displayMessage }]);
+        const displayMessage =
+          data.message
+            .replace(
+              /\[INTERVIEW_COMPLETE\][\s\S]*?\[\/INTERVIEW_COMPLETE\]/,
+              "",
+            )
+            .trim() || data.message;
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: displayMessage },
+        ]);
       }
 
       if (data.feedback) {
@@ -227,7 +260,10 @@ const MockInterview = () => {
           <div className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5 text-orange-500" />
             <span className="font-serif text-lg font-bold">Mock Interview</span>
-            <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/20 text-xs">
+            <Badge
+              variant="outline"
+              className="bg-orange-500/10 text-orange-600 border-orange-500/20 text-xs"
+            >
               {typeLabel}
             </Badge>
           </div>
@@ -238,14 +274,24 @@ const MockInterview = () => {
                 disabled={ending || messages.length < 2}
                 className="inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-600 font-medium disabled:opacity-50"
               >
-                {ending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Square className="h-3 w-3" />}
+                {ending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Square className="h-3 w-3" />
+                )}
                 End Interview
               </button>
             )}
-            <button onClick={() => navigate("/dashboard")} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <button
+              onClick={() => navigate("/interview-dashboard")}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
               Back to Dashboard
             </button>
-            <button onClick={signOut} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <button
+              onClick={signOut}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
               Sign out
             </button>
           </div>
@@ -267,20 +313,38 @@ const MockInterview = () => {
                       transition={{ duration: 0.3 }}
                       className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                     >
-                      <div className={`max-w-[85%] rounded-lg px-4 py-3 text-base leading-relaxed ${
-                        msg.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-card text-card-foreground border border-border"
-                      }`}>
+                      <div
+                        className={`max-w-[85%] rounded-lg px-4 py-3 text-base leading-relaxed ${
+                          msg.role === "user"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-card text-card-foreground border border-border"
+                        }`}
+                      >
                         {msg.role === "assistant" ? (
                           <ReactMarkdown
                             components={{
-                              p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                              p: ({ children }) => (
+                                <p className="mb-3 last:mb-0">{children}</p>
+                              ),
+                              strong: ({ children }) => (
+                                <strong className="font-semibold">
+                                  {children}
+                                </strong>
+                              ),
                               hr: () => <hr className="my-3 border-border" />,
-                              ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1">{children}</ol>,
-                              ul: ({ children }) => <ul className="list-disc pl-5 space-y-1">{children}</ul>,
-                              li: ({ children }) => <li className="pl-0.5">{children}</li>,
+                              ol: ({ children }) => (
+                                <ol className="list-decimal pl-5 space-y-1">
+                                  {children}
+                                </ol>
+                              ),
+                              ul: ({ children }) => (
+                                <ul className="list-disc pl-5 space-y-1">
+                                  {children}
+                                </ul>
+                              ),
+                              li: ({ children }) => (
+                                <li className="pl-0.5">{children}</li>
+                              ),
                             }}
                           >
                             {msg.content}
@@ -293,7 +357,11 @@ const MockInterview = () => {
                   ))}
                 </AnimatePresence>
                 {loading && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex justify-start"
+                  >
                     <div className="bg-card border border-border rounded-lg px-4 py-3">
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     </div>
@@ -311,7 +379,9 @@ const MockInterview = () => {
                     <textarea
                       ref={inputRef}
                       value={input}
-                      onChange={(e) => setInput(e.target.value.slice(0, MAX_MSG_LENGTH))}
+                      onChange={(e) =>
+                        setInput(e.target.value.slice(0, MAX_MSG_LENGTH))
+                      }
                       onInput={handleTextareaInput}
                       onKeyDown={handleKeyDown}
                       placeholder="Type your answer..."
@@ -358,9 +428,13 @@ const MockInterview = () => {
               className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-6"
             >
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-serif text-xl font-bold">Interview Feedback</h2>
+                <h2 className="font-serif text-xl font-bold">
+                  Interview Feedback
+                </h2>
                 <div className="text-center">
-                  <span className={`text-3xl font-bold ${scoreColor(feedback.overall_score)}`}>
+                  <span
+                    className={`text-3xl font-bold ${scoreColor(feedback.overall_score)}`}
+                  >
                     {feedback.overall_score}
                   </span>
                   <span className="text-lg text-muted-foreground">/10</span>
@@ -370,7 +444,9 @@ const MockInterview = () => {
               {/* Strengths */}
               {feedback.strengths.length > 0 && (
                 <div className="mb-4">
-                  <h3 className="text-sm font-medium text-green-500 mb-2">Strengths</h3>
+                  <h3 className="text-sm font-medium text-green-500 mb-2">
+                    Strengths
+                  </h3>
                   <ul className="space-y-1">
                     {feedback.strengths.map((s, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm">
@@ -385,7 +461,9 @@ const MockInterview = () => {
               {/* Areas to improve */}
               {feedback.areas_to_improve.length > 0 && (
                 <div className="mb-4">
-                  <h3 className="text-sm font-medium text-orange-500 mb-2">Areas to Improve</h3>
+                  <h3 className="text-sm font-medium text-orange-500 mb-2">
+                    Areas to Improve
+                  </h3>
                   <ul className="space-y-1">
                     {feedback.areas_to_improve.map((a, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm">
@@ -400,29 +478,45 @@ const MockInterview = () => {
               {/* Key mistakes */}
               {feedback.key_mistakes && feedback.key_mistakes.length > 0 && (
                 <div className="mb-4">
-                  <h3 className="text-sm font-medium text-red-500 mb-2">Key Mistakes</h3>
+                  <h3 className="text-sm font-medium text-red-500 mb-2">
+                    Key Mistakes
+                  </h3>
                   <ul className="space-y-1">
                     {feedback.key_mistakes.map((m, i) => (
-                      <li key={i} className="text-sm text-muted-foreground">- {m}</li>
+                      <li key={i} className="text-sm text-muted-foreground">
+                        - {m}
+                      </li>
                     ))}
                   </ul>
                 </div>
               )}
 
               {/* Question scores */}
-              {feedback.question_scores && feedback.question_scores.length > 0 && (
-                <div className="mb-4">
-                  <h3 className="text-sm font-medium mb-2">Question Breakdown</h3>
-                  <div className="space-y-2">
-                    {feedback.question_scores.map((q, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground truncate mr-2">{q.question}</span>
-                        <span className={`font-medium shrink-0 ${scoreColor(q.score)}`}>{q.score}/10</span>
-                      </div>
-                    ))}
+              {feedback.question_scores &&
+                feedback.question_scores.length > 0 && (
+                  <div className="mb-4">
+                    <h3 className="text-sm font-medium mb-2">
+                      Question Breakdown
+                    </h3>
+                    <div className="space-y-2">
+                      {feedback.question_scores.map((q, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between text-sm"
+                        >
+                          <span className="text-muted-foreground truncate mr-2">
+                            {q.question}
+                          </span>
+                          <span
+                            className={`font-medium shrink-0 ${scoreColor(q.score)}`}
+                          >
+                            {q.score}/10
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {/* Follow-up suggestion */}
               {feedback.suggested_follow_up && (
@@ -441,7 +535,11 @@ const MockInterview = () => {
                 className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 Review Conversation
-                {showConversation ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                {showConversation ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
               </button>
               {showConversation && (
                 <div className="mt-3 space-y-3 max-h-[400px] overflow-y-auto pr-2">
@@ -450,19 +548,37 @@ const MockInterview = () => {
                       key={i}
                       className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                     >
-                      <div className={`max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed ${
-                        msg.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-card text-card-foreground border border-border"
-                      }`}>
+                      <div
+                        className={`max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed ${
+                          msg.role === "user"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-card text-card-foreground border border-border"
+                        }`}
+                      >
                         {msg.role === "assistant" ? (
                           <ReactMarkdown
                             components={{
-                              p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                              ul: ({ children }) => <ul className="list-disc pl-5 space-y-1">{children}</ul>,
-                              ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1">{children}</ol>,
-                              li: ({ children }) => <li className="pl-0.5">{children}</li>,
+                              p: ({ children }) => (
+                                <p className="mb-2 last:mb-0">{children}</p>
+                              ),
+                              strong: ({ children }) => (
+                                <strong className="font-semibold">
+                                  {children}
+                                </strong>
+                              ),
+                              ul: ({ children }) => (
+                                <ul className="list-disc pl-5 space-y-1">
+                                  {children}
+                                </ul>
+                              ),
+                              ol: ({ children }) => (
+                                <ol className="list-decimal pl-5 space-y-1">
+                                  {children}
+                                </ol>
+                              ),
+                              li: ({ children }) => (
+                                <li className="pl-0.5">{children}</li>
+                              ),
                             }}
                           >
                             {msg.content}

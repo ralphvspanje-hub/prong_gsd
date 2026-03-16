@@ -4,8 +4,22 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDemo } from "@/hooks/useDemo";
 import { useTheme } from "@/hooks/useTheme";
 import { useMentorName } from "@/hooks/useMentorName";
-import { Sun, Moon, LogOut, Zap, Map, BarChart3, Clock, Settings, MessageSquare } from "lucide-react";
+import {
+  Sun,
+  Moon,
+  LogOut,
+  Zap,
+  Map,
+  BarChart3,
+  Clock,
+  Settings,
+  MessageSquare,
+  Target,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+// Paths that indicate the user is in interview prep mode
+const INTERVIEW_PATHS = ["/interview-dashboard", "/mock-interview"];
 
 export const Layout = ({ children }: { children: ReactNode }) => {
   const { signOut } = useAuth();
@@ -15,14 +29,68 @@ export const Layout = ({ children }: { children: ReactNode }) => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const navItems = [
+  const isInterviewMode = INTERVIEW_PATHS.some((p) =>
+    location.pathname.startsWith(p),
+  );
+
+  // Learning nav items (default)
+  const learningNavItems = [
     { path: "/dashboard", label: "Today", icon: Zap, mobileVisible: true },
     { path: "/plan", label: "Plan", icon: Map, mobileVisible: true },
-    { path: "/progress", label: "Progress", icon: BarChart3, mobileVisible: true },
+    {
+      path: "/progress",
+      label: "Progress",
+      icon: BarChart3,
+      mobileVisible: true,
+    },
     { path: "/history", label: "History", icon: Clock, mobileVisible: false },
-    { path: "/settings", label: "Settings", icon: Settings, mobileVisible: true },
-    { path: "/mentor", label: mentorName, icon: MessageSquare, mobileVisible: true },
+    {
+      path: "/settings",
+      label: "Settings",
+      icon: Settings,
+      mobileVisible: true,
+    },
+    {
+      path: "/mentor",
+      label: mentorName,
+      icon: MessageSquare,
+      mobileVisible: true,
+    },
   ];
+
+  // Interview prep nav items (swapped when on interview pages)
+  const interviewNavItems = [
+    {
+      path: "/interview-dashboard",
+      label: "Prep",
+      icon: Target,
+      mobileVisible: true,
+    },
+    { path: "/plan", label: "Plan", icon: Map, mobileVisible: true },
+    {
+      path: "/progress",
+      label: "Progress",
+      icon: BarChart3,
+      mobileVisible: true,
+    },
+    {
+      path: "/settings",
+      label: "Settings",
+      icon: Settings,
+      mobileVisible: true,
+    },
+    {
+      path: "/mentor",
+      label: mentorName,
+      icon: MessageSquare,
+      mobileVisible: true,
+    },
+  ];
+
+  const navItems = isInterviewMode ? interviewNavItems : learningNavItems;
+
+  // Logo links to the appropriate dashboard
+  const homePath = isInterviewMode ? "/interview-dashboard" : "/dashboard";
 
   const handleSignOut = () => {
     if (isDemo) {
@@ -37,15 +105,28 @@ export const Layout = ({ children }: { children: ReactNode }) => {
     <div className="min-h-screen">
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-sm">
         <div className="container flex h-14 items-center justify-between">
-          <Link to="/dashboard" className="flex items-center gap-2">
+          <Link to={homePath} className="flex items-center gap-2">
             <img src="/Fork.png" className="h-5 w-5" />
-            <span className="font-serif text-lg font-bold tracking-tight">ProngGSD</span>
+            <span className="font-serif text-lg font-bold tracking-tight">
+              ProngGSD
+            </span>
+            {isInterviewMode && (
+              <span className="text-[10px] font-medium text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded">
+                PREP
+              </span>
+            )}
           </Link>
 
           <nav className="hidden md:flex items-center gap-1">
             {navItems.map((item) => (
               <Link key={item.path} to={item.path}>
-                <Button variant={location.pathname === item.path ? "secondary" : "ghost"} size="sm" className="gap-2">
+                <Button
+                  variant={
+                    location.pathname === item.path ? "secondary" : "ghost"
+                  }
+                  size="sm"
+                  className="gap-2"
+                >
                   <item.icon className="h-4 w-4" />
                   {item.label}
                 </Button>
@@ -54,10 +135,24 @@ export const Layout = ({ children }: { children: ReactNode }) => {
           </nav>
 
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8">
-              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              className="h-8 w-8"
+            >
+              {theme === "dark" ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
             </Button>
-            <Button variant="ghost" size="icon" onClick={handleSignOut} className="h-8 w-8">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleSignOut}
+              className="h-8 w-8"
+            >
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -66,23 +161,32 @@ export const Layout = ({ children }: { children: ReactNode }) => {
 
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/95 backdrop-blur-sm md:hidden">
         <div className="flex justify-around py-2">
-          {navItems.filter((item) => item.mobileVisible).map((item) => (
-            <Link key={item.path} to={item.path}>
-              <Button variant="ghost" size="sm" className={`flex-col gap-0.5 h-auto py-1.5 px-2 ${location.pathname === item.path ? "text-accent" : "text-muted-foreground"}`}>
-                <item.icon className="h-4 w-4" />
-                <span className="text-[10px] truncate max-w-[48px]">{item.label}</span>
-              </Button>
-            </Link>
-          ))}
+          {navItems
+            .filter((item) => item.mobileVisible)
+            .map((item) => (
+              <Link key={item.path} to={item.path}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`flex-col gap-0.5 h-auto py-1.5 px-2 ${location.pathname === item.path ? "text-accent" : "text-muted-foreground"}`}
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span className="text-[10px] truncate max-w-[48px]">
+                    {item.label}
+                  </span>
+                </Button>
+              </Link>
+            ))}
         </div>
       </nav>
 
-      <main className="container pb-20 md:pb-8 pt-6">
-        {children}
-      </main>
+      <main className="container pb-20 md:pb-8 pt-6">{children}</main>
 
       <footer className="border-t border-border py-4 text-center pb-20 md:pb-4">
-        <Link to="/about" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+        <Link
+          to="/about"
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
           About ProngGSD
         </Link>
       </footer>

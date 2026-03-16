@@ -10,10 +10,25 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Send, Loader2, Plus, ArrowLeftRight, Pencil, BarChart3, Trash2, RefreshCw,
-  Check, X, Gauge, HelpCircle, Repeat2,
+  Send,
+  Loader2,
+  Plus,
+  ArrowLeftRight,
+  Pencil,
+  BarChart3,
+  Trash2,
+  RefreshCw,
+  Check,
+  X,
+  Gauge,
+  HelpCircle,
+  Repeat2,
 } from "lucide-react";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -32,28 +47,109 @@ interface ProposedChanges {
 
 const MAX_MENTOR_MSG_LENGTH = 2000;
 
-const QUICK_ACTIONS = [
-  { label: "Add a Pillar", icon: Plus, message: "I want to add a new pillar to my learning plan." },
-  { label: "Swap a Pillar", icon: ArrowLeftRight, message: "I want to swap out one of my existing pillars for a new one." },
-  { label: "Edit a Pillar", icon: Pencil, message: "I want to edit one of my existing pillars." },
-  { label: "Change Level", icon: BarChart3, message: "I want to reassess the difficulty level for one of my pillars. Can you ask me some questions to figure out the right level?" },
-  { label: "Delete a Pillar", icon: Trash2, message: "I want to delete one of my pillars." },
-  { label: "Full Recalibration", icon: RefreshCw, message: "I want to do a full recalibration of my entire learning plan and career goals." },
-  { label: "Adjust Pacing", icon: Gauge, message: "I want to adjust the pacing of my learning plan — it might be too fast or too slow for me right now." },
-  { label: "I'm Stuck", icon: HelpCircle, message: "I'm stuck on something in my current learning tasks. Can you help me figure out a way forward?" },
-  { label: "Swap Resources", icon: Repeat2, message: "I'd like to find different learning resources for one of my current tasks. The current one isn't working for me." },
+const LEARNING_QUICK_ACTIONS = [
+  {
+    label: "Add a Pillar",
+    icon: Plus,
+    message: "I want to add a new pillar to my learning plan.",
+  },
+  {
+    label: "Swap a Pillar",
+    icon: ArrowLeftRight,
+    message: "I want to swap out one of my existing pillars for a new one.",
+  },
+  {
+    label: "Edit a Pillar",
+    icon: Pencil,
+    message: "I want to edit one of my existing pillars.",
+  },
+  {
+    label: "Change Level",
+    icon: BarChart3,
+    message:
+      "I want to reassess the difficulty level for one of my pillars. Can you ask me some questions to figure out the right level?",
+  },
+  {
+    label: "Delete a Pillar",
+    icon: Trash2,
+    message: "I want to delete one of my pillars.",
+  },
+  {
+    label: "Full Recalibration",
+    icon: RefreshCw,
+    message:
+      "I want to do a full recalibration of my entire learning plan and career goals.",
+  },
+  {
+    label: "Adjust Pacing",
+    icon: Gauge,
+    message:
+      "I want to adjust the pacing of my learning plan — it might be too fast or too slow for me right now.",
+  },
+  {
+    label: "I'm Stuck",
+    icon: HelpCircle,
+    message:
+      "I'm stuck on something in my current learning tasks. Can you help me figure out a way forward?",
+  },
+  {
+    label: "Swap Resources",
+    icon: Repeat2,
+    message:
+      "I'd like to find different learning resources for one of my current tasks. The current one isn't working for me.",
+  },
+];
+
+const INTERVIEW_QUICK_ACTIONS = [
+  {
+    label: "Review Weak Areas",
+    icon: HelpCircle,
+    message:
+      "Can you review my weak areas and suggest what I should focus on most before the interview?",
+  },
+  {
+    label: "Adjust Intensity",
+    icon: Gauge,
+    message:
+      "I want to adjust the intensity of my interview prep — it might be too much or too little right now.",
+  },
+  {
+    label: "Mock Interview Tips",
+    icon: Repeat2,
+    message:
+      "Can you give me tips for my next mock interview based on my past performance?",
+  },
+  {
+    label: "Replan Remaining Time",
+    icon: RefreshCw,
+    message:
+      "I want to restructure my remaining interview prep time. Can you help me reprioritize?",
+  },
+  {
+    label: "Swap Resources",
+    icon: ArrowLeftRight,
+    message:
+      "I'd like to find different practice resources for one of my current interview prep tasks.",
+  },
+  {
+    label: "I'm Stuck",
+    icon: HelpCircle,
+    message:
+      "I'm stuck on an interview prep topic. Can you help me figure out a way forward?",
+  },
 ];
 
 const ACTION_TOASTS: Record<string, string> = {
   adjust_pacing: "Pacing updated!",
   restructure_plan: "Plan updated — upcoming weeks will regenerate.",
-  regenerate_upcoming: "Upcoming blocks cleared — they'll regenerate with your next week.",
+  regenerate_upcoming:
+    "Upcoming blocks cleared — they'll regenerate with your next week.",
   swap_resource: "Task resource updated!",
 };
 
 /** Parse PROPOSED_CHANGES from assistant message. Supports both single object and array format. */
 const parseProposedChanges = (
-  content: string
+  content: string,
 ): { cleanContent: string; changes: ProposedChanges[] } => {
   const marker = "PROPOSED_CHANGES";
   const idx = content.indexOf(marker);
@@ -86,13 +182,26 @@ const Mentor = () => {
   const { mentorName } = useMentorName();
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
+
+  // Derive mentor mode from localStorage (set by Dashboard / InterviewDashboard on mount)
+  const mentorMode =
+    localStorage.getItem("pronggsd-dashboard-view") === "interview_prep"
+      ? "interview_prep"
+      : "learning";
+  const QUICK_ACTIONS =
+    mentorMode === "interview_prep"
+      ? INTERVIEW_QUICK_ACTIONS
+      : LEARNING_QUICK_ACTIONS;
+
   const [messages, setMessages] = useState<MentorMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(false);
   const [applyingChanges, setApplyingChanges] = useState<string | null>(null);
   // Track dismissed changes as "messageIndex-actionIndex" keys
-  const [dismissedChanges, setDismissedChanges] = useState<Set<string>>(new Set());
+  const [dismissedChanges, setDismissedChanges] = useState<Set<string>>(
+    new Set(),
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const didShowEmpty = useRef(false);
@@ -157,9 +266,12 @@ const Mentor = () => {
         content: messageText,
       });
 
-      const { data, error } = await supabase.functions.invoke("gsd-mentor-chat", {
-        body: { message: messageText },
-      });
+      const { data, error } = await supabase.functions.invoke(
+        "gsd-mentor-chat",
+        {
+          body: { message: messageText, mode: mentorMode },
+        },
+      );
       if (error) {
         let msg = error.message;
         try {
@@ -169,7 +281,10 @@ const Mentor = () => {
         throw new Error(msg);
       }
 
-      const assistantMsg: MentorMessage = { role: "assistant", content: data.message };
+      const assistantMsg: MentorMessage = {
+        role: "assistant",
+        content: data.message,
+      };
       setMessages([...newMessages, assistantMsg]);
 
       await supabase.from("mentor_conversations").insert({
@@ -205,9 +320,12 @@ const Mentor = () => {
         return;
       }
 
-      const { error } = await supabase.functions.invoke("gsd-apply-mentor-changes", {
-        body: change,
-      });
+      const { error } = await supabase.functions.invoke(
+        "gsd-apply-mentor-changes",
+        {
+          body: change,
+        },
+      );
       if (error) {
         let msg = error.message;
         try {
@@ -237,7 +355,10 @@ const Mentor = () => {
 
   if (showEmptyState) didShowEmpty.current = true;
 
-  const openingMessage = `Hey! I'm ${mentorName} — your learning strategist. I know your Prongs, your pillars, your plan, and where you're headed. Think of me as a thinking partner who asks before they act. What's on your mind?`;
+  const openingMessage =
+    mentorMode === "interview_prep"
+      ? `Hey! I'm ${mentorName} — your interview prep coach. I know your target role, your weak areas, your timeline, and your crash course plan. Let's make sure you're ready. What do you need?`
+      : `Hey! I'm ${mentorName} — your learning strategist. I know your Prongs, your pillars, your plan, and where you're headed. Think of me as a thinking partner who asks before they act. What's on your mind?`;
 
   return (
     <Layout>
@@ -274,7 +395,11 @@ const Mentor = () => {
                       <textarea
                         ref={inputRef}
                         value={input}
-                        onChange={(e) => setInput(e.target.value.slice(0, MAX_MENTOR_MSG_LENGTH))}
+                        onChange={(e) =>
+                          setInput(
+                            e.target.value.slice(0, MAX_MENTOR_MSG_LENGTH),
+                          )
+                        }
                         onInput={handleTextareaInput}
                         onKeyDown={handleKeyDown}
                         placeholder={`Ask ${mentorName} anything...`}
@@ -327,7 +452,11 @@ const Mentor = () => {
               /* ── Active Conversation ── */
               <motion.div
                 key="active"
-                initial={!isMobile && didShowEmpty.current ? { opacity: 0, y: 20 } : false}
+                initial={
+                  !isMobile && didShowEmpty.current
+                    ? { opacity: 0, y: 20 }
+                    : false
+                }
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, ease: "easeOut" }}
                 onAnimationComplete={() => inputRef.current?.focus()}
@@ -360,7 +489,9 @@ const Mentor = () => {
                               >
                                 {msg.role === "assistant" ? (
                                   <div className="prose-powerhouse text-sm max-w-none">
-                                    <ReactMarkdown>{cleanContent}</ReactMarkdown>
+                                    <ReactMarkdown>
+                                      {cleanContent}
+                                    </ReactMarkdown>
                                   </div>
                                 ) : (
                                   msg.content
@@ -368,11 +499,14 @@ const Mentor = () => {
                               </div>
                               {changes.map((change, ci) => {
                                 const dismissKey = `${i}-${ci}`;
-                                if (dismissedChanges.has(dismissKey)) return null;
+                                if (dismissedChanges.has(dismissKey))
+                                  return null;
                                 return (
                                   <Card key={ci} className="border-accent/30">
                                     <CardContent className="py-3 space-y-3">
-                                      <p className="text-sm font-medium">Apply these changes?</p>
+                                      <p className="text-sm font-medium">
+                                        Apply these changes?
+                                      </p>
                                       <p className="text-xs text-muted-foreground">
                                         Action:{" "}
                                         <span className="capitalize">
@@ -383,7 +517,9 @@ const Mentor = () => {
                                         <Button
                                           size="sm"
                                           className="gap-1"
-                                          onClick={() => applyChanges(change, dismissKey)}
+                                          onClick={() =>
+                                            applyChanges(change, dismissKey)
+                                          }
                                           disabled={!!applyingChanges}
                                         >
                                           {applyingChanges === change.action ? (
@@ -399,7 +535,8 @@ const Mentor = () => {
                                           className="gap-1"
                                           onClick={() =>
                                             setDismissedChanges(
-                                              (prev) => new Set([...prev, dismissKey])
+                                              (prev) =>
+                                                new Set([...prev, dismissKey]),
                                             )
                                           }
                                         >
@@ -417,7 +554,11 @@ const Mentor = () => {
                       })}
                     </AnimatePresence>
                     {loading && (
-                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="flex justify-start"
+                      >
                         <div className="bg-card border border-border rounded-lg px-4 py-3">
                           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                         </div>
@@ -448,7 +589,11 @@ const Mentor = () => {
                       <textarea
                         ref={inputRef}
                         value={input}
-                        onChange={(e) => setInput(e.target.value.slice(0, MAX_MENTOR_MSG_LENGTH))}
+                        onChange={(e) =>
+                          setInput(
+                            e.target.value.slice(0, MAX_MENTOR_MSG_LENGTH),
+                          )
+                        }
                         onInput={handleTextareaInput}
                         onKeyDown={handleKeyDown}
                         placeholder={`Ask ${mentorName} anything...`}
@@ -473,7 +618,11 @@ const Mentor = () => {
                                 : "text-foreground hover:bg-muted"
                             }`}
                           >
-                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                            {loading ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Send className="h-4 w-4" />
+                            )}
                           </button>
                         </TooltipTrigger>
                         <TooltipContent>Send</TooltipContent>

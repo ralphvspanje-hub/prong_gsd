@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import { useNavigate, Navigate } from "react-router-dom";
+import { useNavigate, Navigate, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { StreakCounter } from "@/components/plan/StreakCounter";
@@ -8,12 +8,13 @@ import { WeeklyGoalCard } from "@/components/plan/WeeklyGoalCard";
 import { DailyTaskList } from "@/components/plan/DailyTaskList";
 import { CheckinModal } from "@/components/plan/CheckinModal";
 import { PlanCompletionModal } from "@/components/plan/PlanCompletionModal";
+import InterviewCountdown from "@/components/plan/InterviewCountdown";
+import { MistakeJournalDisplay } from "@/components/plan/MistakeJournalDisplay";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Zap, Loader2, ArrowRight, Target } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Zap, Loader2, ArrowRight, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Tables } from "@/integrations/supabase/types";
 
@@ -44,39 +45,37 @@ interface PlanOutline {
 }
 
 // ---------------------------------------------------------------------------
-// Dashboard — learning plan only (interview prep lives at /interview-dashboard)
+// InterviewDashboard — dedicated interview prep experience
 // ---------------------------------------------------------------------------
 
-const Dashboard = () => {
+const InterviewDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const userId = user?.id;
 
-  // Set localStorage so shared pages (/plan, /mentor) know we're in learning mode
+  // Set localStorage so shared pages (/plan, /mentor) know we're in interview mode
   useMemo(() => {
-    localStorage.setItem("pronggsd-dashboard-view", "learning");
+    localStorage.setItem("pronggsd-dashboard-view", "interview_prep");
   }, []);
 
   // Modal state
   const [checkinBlock, setCheckinBlock] = useState<PlanBlock | null>(null);
   const [showPlanComplete, setShowPlanComplete] = useState(false);
-  const [showExtendPrompt, setShowExtendPrompt] = useState(false);
-  const [isExtending, setIsExtending] = useState(false);
   const [blockPollCount, setBlockPollCount] = useState(0);
 
   // ---- Queries ----
 
-  // Active learning plan
+  // Active interview prep plan
   const { data: plan, isLoading: planLoading } = useQuery({
-    queryKey: ["learning-plan", userId],
+    queryKey: ["interview-plan", userId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("learning_plans")
         .select("*")
         .eq("user_id", userId!)
         .eq("is_active", true)
-        .eq("plan_type", "learning")
+        .eq("plan_type", "interview_prep")
         .maybeSingle();
       if (error) throw error;
       return data as LearningPlan | null;
@@ -84,23 +83,22 @@ const Dashboard = () => {
     enabled: !!userId,
   });
 
-  // Lightweight check for interview prep plan (for "Enter Interview Prep" card)
-  const { data: hasInterviewPlan } = useQuery({
-    queryKey: ["interview-plan-exists", userId],
+  // Interview profile context (for countdown)
+  const { data: interviewProfile } = useQuery({
+    queryKey: ["interview-profile", userId],
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from("learning_plans")
-        .select("*", { count: "exact", head: true })
+      const { data, error } = await supabase
+        .from("user_profile")
+        .select("interview_target_role, interview_date, interview_intensity")
         .eq("user_id", userId!)
-        .eq("is_active", true)
-        .eq("plan_type", "interview_prep");
+        .maybeSingle();
       if (error) throw error;
-      return (count ?? 0) > 0;
+      return data;
     },
-    enabled: !!userId,
+    enabled: !!userId && !!plan,
   });
 
-  // Pillars (for name lookup + redirect logic)
+  // Pillars (interview-specific: sort_order >= 100)
   const { data: pillars } = useQuery({
     queryKey: ["pillars", userId],
     queryFn: async () => {
@@ -115,8 +113,7 @@ const Dashboard = () => {
     enabled: !!userId,
   });
 
-  // Current week's plan blocks — uncompleted blocks with lowest week number.
-  // Poll every 3s when plan exists but no blocks yet (generation race condition).
+  // Current week's plan blocks
   const { data: currentBlocks, isLoading: blocksLoading } = useQuery({
     queryKey: ["plan-blocks-current", plan?.id],
     queryFn: async () => {
@@ -197,13 +194,15 @@ const Dashboard = () => {
   const outline = plan?.plan_outline as unknown as PlanOutline | null;
   const currentWeekNumber = currentBlocks?.[0]?.week_number;
 
+  // Pacing notes — limit to 1 for interview prep to avoid repetition
   const pacingNotes = useMemo(() => {
     const notes = (currentBlocks || [])
       .map((b) => b.pacing_note)
       .filter(Boolean) as string[];
-    return [...new Set(notes)];
+    return notes.slice(0, 1);
   }, [currentBlocks]);
 
+  // Weekly goal cards
   const pillarGoals = useMemo(() => {
     if (!currentBlocks || !pillars) return [];
     return currentBlocks
@@ -221,7 +220,7 @@ const Dashboard = () => {
     currentBlocks.length === 0 &&
     plan;
 
-  // ---- Task completion ----
+  // ---- Task completion (same logic as Dashboard) ----
 
   const handleToggleTask = useCallback(
     async (taskId: string, completed: boolean) => {
@@ -350,6 +349,8 @@ const Dashboard = () => {
         return;
       }
 
+      // Interview plans generate all blocks upfront, so no next-block generation needed.
+      // But handle it for safety in case plan was extended.
       if (checkinResult?.next_block?.should_generate) {
         const nextWeek = checkinResult.next_block;
         for (const wp of nextWeek.pillars || []) {
@@ -378,10 +379,6 @@ const Dashboard = () => {
         }
       }
 
-      if (checkinResult?.nearing_end) {
-        setShowExtendPrompt(true);
-      }
-
       setCheckinBlock(null);
       queryClient.invalidateQueries({
         queryKey: ["plan-blocks-current", plan.id],
@@ -392,45 +389,11 @@ const Dashboard = () => {
     [checkinBlock, plan, outline, pillars, userId, queryClient],
   );
 
-  // ---- Extend plan handler ----
-
-  const handleExtendPlan = useCallback(async () => {
-    if (!plan) return;
-    setIsExtending(true);
-    try {
-      await supabase.functions.invoke("gsd-generate-plan", {
-        body: { mode: "extend_plan", plan_id: plan.id, additional_weeks: 4 },
-      });
-      toast.success("Plan extended! New weeks have been added.");
-      queryClient.invalidateQueries({ queryKey: ["learning-plan", userId] });
-      queryClient.invalidateQueries({
-        queryKey: ["plan-blocks-current", plan.id],
-      });
-    } catch {
-      toast.error("Failed to extend plan.");
-    } finally {
-      setIsExtending(false);
-      setShowExtendPrompt(false);
-    }
-  }, [plan, userId, queryClient]);
-
   // ---- Render ----
 
-  // No learning plan — check if we should redirect somewhere useful
+  // No interview plan → back to main dashboard
   if (!planLoading && !plan && userId) {
-    // If user only has interview pillars, send to interview onboarding
-    const hasInterviewPillars = pillars?.some(
-      (p) => (p.sort_order ?? 0) >= 100,
-    );
-    const hasLearningPillars = pillars?.some((p) => (p.sort_order ?? 0) < 100);
-    if (hasInterviewPillars && !hasLearningPillars) {
-      return <Navigate to="/interview-onboarding" replace />;
-    }
-    // If they have an interview plan but no learning plan, send to interview dashboard
-    if (hasInterviewPlan) {
-      return <Navigate to="/interview-dashboard" replace />;
-    }
-    return <Navigate to="/context-upload" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   // Loading
@@ -474,9 +437,9 @@ const Dashboard = () => {
             </>
           ) : (
             <>
-              <Loader2 className="h-8 w-8 animate-spin text-accent" />
+              <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
               <p className="text-sm text-muted-foreground">
-                Generating your first week...
+                Generating your interview prep plan...
               </p>
             </>
           )}
@@ -490,16 +453,23 @@ const Dashboard = () => {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center py-32 gap-4 text-center">
-          <Zap className="h-10 w-10 text-accent" />
-          <h1 className="font-serif text-2xl font-bold">Plan complete!</h1>
+          <Zap className="h-10 w-10 text-orange-500" />
+          <h1 className="font-serif text-2xl font-bold">
+            Interview prep complete!
+          </h1>
           <p className="text-sm text-muted-foreground max-w-md">
-            You've finished your {outline.total_weeks}-week plan. Talk to your
-            mentor about what's next, or start fresh.
+            You've finished your {outline.total_weeks}-week crash course. Talk
+            to your mentor for final tips, or head back to your learning plan.
           </p>
           <div className="flex gap-2 mt-2">
-            <Button onClick={() => navigate("/mentor")}>What's next?</Button>
-            <Button variant="outline" onClick={() => navigate("/onboarding")}>
-              Start fresh
+            <Button
+              onClick={() => navigate("/mentor")}
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              Final tips
+            </Button>
+            <Button variant="outline" onClick={() => navigate("/dashboard")}>
+              Back to learning
             </Button>
           </div>
         </div>
@@ -518,38 +488,25 @@ const Dashboard = () => {
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-5 py-4">
-        {/* Enter interview prep (when interview plan exists) */}
-        {hasInterviewPlan && (
-          <Link to="/interview-dashboard" className="block">
-            <div className="flex items-center gap-3 rounded-lg border border-orange-500/30 bg-orange-500/5 px-4 py-3 hover:bg-orange-500/10 transition-colors cursor-pointer">
-              <Target className="h-4 w-4 text-orange-500 shrink-0" />
-              <p className="text-sm flex-1">
-                <span className="text-orange-500 font-medium">
-                  Interview Prep Mode
-                </span>
-                <span className="text-muted-foreground">
-                  {" "}
-                  — switch to your crash course
-                </span>
-              </p>
-              <ArrowRight className="h-3.5 w-3.5 text-orange-500 shrink-0" />
-            </div>
-          </Link>
-        )}
+        {/* Back to learning dashboard */}
+        <Link to="/dashboard">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1 text-muted-foreground -ml-2"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Learning Dashboard
+          </Button>
+        </Link>
 
-        {/* Start interview prep (when no interview plan exists) */}
-        {!hasInterviewPlan && plan && (
-          <Link to="/interview-onboarding" className="block">
-            <div className="flex items-center gap-3 rounded-lg border border-dashed border-orange-500/30 bg-orange-500/5 px-4 py-3 hover:bg-orange-500/10 transition-colors cursor-pointer">
-              <Target className="h-4 w-4 text-orange-500 shrink-0" />
-              <p className="text-sm text-muted-foreground">
-                Interview coming up?{" "}
-                <span className="text-orange-500 font-medium">
-                  Start a crash course
-                </span>
-              </p>
-            </div>
-          </Link>
+        {/* Interview countdown */}
+        {interviewProfile && (
+          <InterviewCountdown
+            interviewDate={interviewProfile.interview_date}
+            targetRole={interviewProfile.interview_target_role}
+            intensity={interviewProfile.interview_intensity}
+          />
         )}
 
         {/* Streak counter */}
@@ -557,50 +514,6 @@ const Dashboard = () => {
 
         {/* Pacing banner */}
         <PacingBanner pacingNotes={pacingNotes} />
-
-        {/* Extend plan prompt (exploratory plans nearing end) */}
-        {showExtendPrompt && (
-          <div className="rounded-lg border bg-card p-4 space-y-2">
-            <p className="text-sm font-medium">Your plan is almost done!</p>
-            <p className="text-sm text-muted-foreground">
-              Would you like to extend it with more weeks, or talk to your
-              mentor about what's next?
-            </p>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={handleExtendPlan}
-                disabled={isExtending}
-              >
-                {isExtending ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />{" "}
-                    Extending...
-                  </>
-                ) : (
-                  "Extend plan"
-                )}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setShowExtendPrompt(false);
-                  navigate("/mentor");
-                }}
-              >
-                Talk to mentor
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setShowExtendPrompt(false)}
-              >
-                Dismiss
-              </Button>
-            </div>
-          </div>
-        )}
 
         {/* Weekly goal card */}
         {currentWeekNumber && pillarGoals.length > 0 && (
@@ -617,6 +530,9 @@ const Dashboard = () => {
           pillars={(pillars || []).map((p) => ({ id: p.id, name: p.name }))}
           onToggleTask={handleToggleTask}
         />
+
+        {/* Mistake journal */}
+        {userId && <MistakeJournalDisplay userId={userId} />}
 
         {/* View full plan link */}
         <div className="pt-2">
@@ -648,4 +564,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default InterviewDashboard;

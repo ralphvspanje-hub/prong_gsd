@@ -4,7 +4,7 @@
 
 ProngGSD ("Get Shit Done") is an AI-powered learning orchestrator, forked from DailyProng. Instead of generating learning content directly, it builds personalized multi-week plans that route users to the best external platforms for each skill, with task tracking and pacing adaptation. Users complete a structured AI onboarding, then follow a plan of daily tasks with external resources. An AI mentor provides ongoing career guidance and can restructure the plan. Dark/light theme.
 
-**Status:** Phase 9 (Interview Prep Mode) in progress. Phase 1 complete: parallel interview prep crash course. Phase 2 complete: AI mock interviews with edge function (`gsd-mock-interview`), chat UI (`/mock-interview/:id`), "Start Mock Interview" button on tasks, mistake journal (form + dashboard display). Phase 3 (main onboarding detection) pending. Previous: Phase 8 (Polish and Launch Prep) complete. See `IMPLEMENTATION_DOC_LEARNING_ORCHESTRATOR.md` for the full vision.
+**Status:** Phase 9 (Interview Prep Mode) in progress. Phase 4 complete: separate interview prep dashboard at `/interview-dashboard` with dedicated navigation, interview-focused mentor mode, and clean learning/interview separation. Phase 3 complete: main onboarding detects interview prep focus and routes to `/interview-onboarding`. Phase 2 complete: AI mock interviews with edge function (`gsd-mock-interview`), chat UI (`/mock-interview/:id`), "Start Mock Interview" button on tasks, mistake journal (form + dashboard display). Phase 1 complete: parallel interview prep crash course. Previous: Phase 8 (Polish and Launch Prep) complete. See `IMPLEMENTATION_DOC_LEARNING_ORCHESTRATOR.md` for the full vision.
 
 ## Tech Stack
 
@@ -56,37 +56,37 @@ Each subfolder has its own `CLAUDE.md`. Read it when working in that folder.
 
 ### Legacy tables (from DailyProng — still exist, do not delete)
 
-| Table | Purpose |
-|-------|---------|
-| **user_profile** | User info, career goals, mentor name, learning prefs + ProngGSD fields |
-| **phases** | Named time-bounded learning phases with goals |
-| **pillars** | Strategic skill pillars (name, level 1–5, trend, weight, blocks_completed_at_level) |
-| **phase_weights** | Many-to-many link: phase ↔ pillar with weight |
-| **topic_map** | Clusters of subtopics per pillar, priority-ordered |
-| **cycles** | Themed multi-section learning cycles per pillar |
-| **units** | Individual learning units with content + feedback |
-| **progress_archive** | Completed cycle summaries |
-| **mentor_conversations** | Mentor chat history (role + content) |
-| **onboarding_conversations** | Onboarding chat state (messages jsonb) |
-| **personal_notes** | Free-form user notes |
-| **api_rate_limits** | Rate limit tracking per user/IP/endpoint |
+| Table                        | Purpose                                                                             |
+| ---------------------------- | ----------------------------------------------------------------------------------- |
+| **user_profile**             | User info, career goals, mentor name, learning prefs + ProngGSD fields              |
+| **phases**                   | Named time-bounded learning phases with goals                                       |
+| **pillars**                  | Strategic skill pillars (name, level 1–5, trend, weight, blocks_completed_at_level) |
+| **phase_weights**            | Many-to-many link: phase ↔ pillar with weight                                       |
+| **topic_map**                | Clusters of subtopics per pillar, priority-ordered                                  |
+| **cycles**                   | Themed multi-section learning cycles per pillar                                     |
+| **units**                    | Individual learning units with content + feedback                                   |
+| **progress_archive**         | Completed cycle summaries                                                           |
+| **mentor_conversations**     | Mentor chat history (role + content)                                                |
+| **onboarding_conversations** | Onboarding chat state (messages jsonb)                                              |
+| **personal_notes**           | Free-form user notes                                                                |
+| **api_rate_limits**          | Rate limit tracking per user/IP/endpoint                                            |
 
 ### New ProngGSD tables (Phase 1)
 
-| Table | Purpose | RLS |
-|-------|---------|-----|
+| Table                 | Purpose                                          | RLS                  |
+| --------------------- | ------------------------------------------------ | -------------------- |
 | **curated_resources** | External learning resources (shared, no user_id) | authenticated SELECT |
-| **learning_plans** | Multi-week plan per user | user_id scoped |
-| **plan_blocks** | Weekly task sets per pillar | user_id scoped |
-| **plan_tasks** | Individual tasks within plan blocks | user_id scoped |
-| **user_progress** | Streak and progress tracking | user_id scoped |
+| **learning_plans**    | Multi-week plan per user                         | user_id scoped       |
+| **plan_blocks**       | Weekly task sets per pillar                      | user_id scoped       |
+| **plan_tasks**        | Individual tasks within plan blocks              | user_id scoped       |
+| **user_progress**     | Streak and progress tracking                     | user_id scoped       |
 
 ### Interview Prep tables (Phase 9)
 
-| Table | Purpose | RLS |
-|-------|---------|-----|
+| Table               | Purpose                                              | RLS            |
+| ------------------- | ---------------------------------------------------- | -------------- |
 | **mock_interviews** | AI mock interview sessions with conversation history | user_id scoped |
-| **mistake_journal** | Post-mock mistake tracking (timebox method) | user_id scoped |
+| **mistake_journal** | Post-mock mistake tracking (timebox method)          | user_id scoped |
 
 ### New columns on learning_plans
 
@@ -99,52 +99,62 @@ Each subfolder has its own `CLAUDE.md`. Read it when working in that folder.
 ## Key Architectural Rules
 
 ### Cloud-first (not optional)
+
 Supabase is **required**. All user data lives in Postgres. No local-first fallback.
 
 ### Demo mode (currently hidden)
+
 `useDemo()` context still exists but the entry point on the Auth page is hidden. Demo mode is tied to the old unit flow which is replaced by a placeholder.
 
 ### Auth guards
+
 - **`ProtectedRoute`** — demo → render; loading → spinner; no session → redirect `/auth`
 - **`AuthRoute`** — demo → redirect `/dashboard`; loading → spinner; session → redirect `/dashboard`; else render Auth
 
 ### AI calls stay server-side
+
 All LLM calls route through Supabase Edge Functions. The client never touches an API key. Current model: `gemini-3.1-flash-lite` via Google Generative AI REST API.
 
 ### Edge functions share Supabase project with DailyProng
+
 All ProngGSD edge functions are prefixed with `gsd-` to avoid collisions. DailyProng's original functions still exist on the shared Supabase project.
 
 ### Mentor name
+
 Stored in `user_profile.mentor_name`. Demo uses `"Sage"`. Loaded via `useMentorName()` hook.
 
 ### Theme
+
 `pronggsd-theme` key in localStorage. `dark` class on `<html>`. Default: `dark`. Toggle via `useTheme()`.
 
 ### Auto-generated files — do not edit
+
 - `src/integrations/supabase/client.ts`
 - `src/integrations/supabase/types.ts`
 
 ### shadcn/ui primitives — do not edit
+
 Everything in `src/components/ui/` is a shadcn/ui primitive. Add new ones via the shadcn CLI, never edit existing ones manually.
 
 ## Routes
 
-| Path | Component | Guard | Purpose |
-|------|-----------|-------|---------|
-| `/auth` | Auth | AuthRoute | Login/signup (demo hidden) |
-| `/` | — | — | Redirects to `/dashboard` |
-| `/dashboard` | Dashboard | Protected | Three-layer daily task view (redirects to `/onboarding` if no plan) |
-| `/plan` | PlanOverview | Protected | Full multi-week plan timeline (redirects to `/onboarding` if no plan) |
-| `/context-upload` | ContextUpload | Protected | Resume/LinkedIn PDF upload before onboarding (optional, skippable). Redirects to `/dashboard` if plan exists. If pillars exist but no plan (post-rewind), shows "Generate Plan" button to skip onboarding. |
-| `/onboarding` | Onboarding | Protected | AI onboarding chat |
-| `/interview-onboarding` | InterviewOnboarding | Protected | Interview prep mini-onboarding (3-4 turns) |
-| `/mock-interview/:id` | MockInterview | Protected | AI mock interview chat + feedback + mistake journal |
-| `/progress` | Progress | Protected | Plan-based progress: stats, streak + heatmap, weekly/pillar charts (Recharts), pillar levels, plan summary |
-| `/history` | History | Protected | Plan blocks with tasks, searchable/filterable by pillar and week |
-| `/settings` | SettingsPage | Protected | Profile, mentor name, pillars, LinkedIn/resume context, danger zone |
-| `/mentor` | Mentor | Protected | AI mentor chat (plan-aware, multi-action) |
-| `/about` | About | None | Static "What is a Prong?" page |
-| `*` | NotFound | None | 404 |
+| Path                    | Component           | Guard     | Purpose                                                                                                                                                                                                    |
+| ----------------------- | ------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/auth`                 | Auth                | AuthRoute | Login/signup (demo hidden)                                                                                                                                                                                 |
+| `/`                     | —                   | —         | Redirects to `/dashboard`                                                                                                                                                                                  |
+| `/dashboard`            | Dashboard           | Protected | Learning plan daily task view. Redirects to `/context-upload` if no plan, `/interview-dashboard` if only interview plan exists.                                                                            |
+| `/interview-dashboard`  | InterviewDashboard  | Protected | Dedicated interview prep dashboard — countdown, tasks, mistake journal. Redirects to `/dashboard` if no interview plan.                                                                                    |
+| `/plan`                 | PlanOverview        | Protected | Full multi-week plan timeline (redirects to `/onboarding` if no plan)                                                                                                                                      |
+| `/context-upload`       | ContextUpload       | Protected | Resume/LinkedIn PDF upload before onboarding (optional, skippable). Redirects to `/dashboard` if plan exists. If pillars exist but no plan (post-rewind), shows "Generate Plan" button to skip onboarding. |
+| `/onboarding`           | Onboarding          | Protected | AI onboarding chat                                                                                                                                                                                         |
+| `/interview-onboarding` | InterviewOnboarding | Protected | Interview prep mini-onboarding (3-4 turns)                                                                                                                                                                 |
+| `/mock-interview/:id`   | MockInterview       | Protected | AI mock interview chat + feedback + mistake journal                                                                                                                                                        |
+| `/progress`             | Progress            | Protected | Plan-based progress: stats, streak + heatmap, weekly/pillar charts (Recharts), pillar levels, plan summary                                                                                                 |
+| `/history`              | History             | Protected | Plan blocks with tasks, searchable/filterable by pillar and week                                                                                                                                           |
+| `/settings`             | SettingsPage        | Protected | Profile, mentor name, pillars, LinkedIn/resume context, danger zone                                                                                                                                        |
+| `/mentor`               | Mentor              | Protected | AI mentor chat (plan-aware, multi-action)                                                                                                                                                                  |
+| `/about`                | About               | None      | Static "What is a Prong?" page                                                                                                                                                                             |
+| `*`                     | NotFound            | None      | 404                                                                                                                                                                                                        |
 
 ## Running the App
 
@@ -160,10 +170,12 @@ npm run preview    # Preview production build
 ```
 
 Env vars in `.env.local`:
+
 - `VITE_SUPABASE_URL` — Supabase project URL
 - `VITE_SUPABASE_PUBLISHABLE_KEY` — Supabase anon/publishable key
 
 Edge function env vars (set in Supabase dashboard):
+
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 - `GEMINI_API_KEY` — Google Generative AI API key (used by gsd-mentor-chat, gsd-generate-plan, gsd-onboarding-chat, gsd-interview-onboarding, gsd-mock-interview)
 - `OWNER_EMAIL` — Owner account email; gets 500/day rate limit instead of 50
@@ -174,7 +186,7 @@ Edge function env vars (set in Supabase dashboard):
 - README says the env var is `VITE_SUPABASE_ANON_KEY` but `client.ts` actually reads `VITE_SUPABASE_PUBLISHABLE_KEY` — use the latter
 - `supabase/config.toml` has `verify_jwt = false` for both edge functions — JWT validation is done manually in the function code
 - Path alias: `@/` maps to `src/`
-- Dashboard redirects to `/context-upload` if no plan exists; shows three-layer task tracker if plan exists. Block polling has a 30s timeout with retry button on failure.
+- Dashboard (learning) redirects to `/context-upload` if no learning plan; to `/interview-dashboard` if only interview plan exists. InterviewDashboard redirects to `/dashboard` if no interview plan. Block polling has a 30s timeout with retry button on failure.
 - `gsd-reset-user-data` deletes ProngGSD plan data (plan_tasks → plan_blocks → learning_plans → user_progress) in all modes (rewind, full, delete_account). Rewind preserves profile, pillars, phases, onboarding_conversations — use it to test plan generation without re-doing onboarding.
 - ContextUpload shows "Generate Plan from Existing Pillars" button when pillars exist but no plan (post-rewind state), calling `gsd-generate-plan` directly with `full_plan` mode
 - Demo mode entry point is hidden on Auth page — demo context still exists but is non-functional with new task tracker dashboard
@@ -184,7 +196,7 @@ Edge function env vars (set in Supabase dashboard):
 - Task completion fires `gsd-process-checkin` as fire-and-forget (non-blocking); block completion awaits the response
 - `pillars.blocks_completed_at_level` tracks blocks completed at current level for threshold-based leveling — reset to 0 on level change
 - `gsd-generate-plan` has four modes: `full_plan`, `plan_block`, `extend_plan`, `interview_plan` — interview_plan generates 1-3 week intensive crash courses with all blocks upfront
-- `learning_plans.plan_type` scopes plans: `'learning'` or `'interview_prep'`. Both can be active simultaneously. Dashboard toggle switches between them (stored in localStorage `pronggsd-dashboard-view`).
+- `learning_plans.plan_type` scopes plans: `'learning'` or `'interview_prep'`. Both can be active simultaneously. Learning dashboard at `/dashboard`, interview prep at `/interview-dashboard` — fully separate pages. localStorage `pronggsd-dashboard-view` tracks which mode was last active (used by shared pages like `/plan` and `/mentor`).
 - Interview prep plan generation only deactivates other `interview_prep` plans, NOT `learning` plans (and vice versa)
 - Interview-specific pillars use `sort_order >= 100` to avoid collision with main learning pillars
 - Mobile bottom nav has 5 items (History hidden) — History is only in the desktop nav
@@ -206,8 +218,13 @@ Edge function env vars (set in Supabase dashboard):
 - TaskItem renders "Start Mock Interview" button when `resource_type === "mock_interview"` — calls the edge function to create a session, then navigates to `/mock-interview/:id`
 - `gsd-generate-plan` passes through `resource_type: "mock_interview"` (not collapsed to `"search_query"`) — tasks with this type have `platform: "ProngGSD"`, null url/search_query, and MOCK: prefixed actions
 - MistakeJournalForm marks the parent `plan_task` as completed when saving (or skipping) — this is the only completion path for mock interview tasks
-- MistakeJournalDisplay appears on Dashboard only when `viewMode === "interview_prep"` — shows last 10 mistakes with pattern detection
+- MistakeJournalDisplay appears on InterviewDashboard (always shown) — shows last 10 mistakes with pattern detection
 - `gsd-reset-user-data` deletes `mistake_journal` → `mock_interviews` before `plan_tasks` (FK order)
+- Main onboarding detects interview prep focus: if `outputs.primary_focus === "interview_prep"` AND `job_timeline_weeks <= 3`, Onboarding.tsx routes to `/interview-onboarding` instead of generating a learning plan. Conservative — defaults to `long_term_learning` when ambiguous.
+- Phase 4: Dashboard and InterviewDashboard are fully separate pages. `DashboardToggle.tsx` was deleted. Layout.tsx swaps nav items based on current path (paths starting with `/interview-dashboard` or `/mock-interview` show interview nav).
+- Phase 4: `gsd-mentor-chat` accepts optional `mode` param (`"learning"` or `"interview_prep"`). When interview mode: uses interview coach persona, filters pillars to `sort_order >= 100`, filters plan to `interview_prep` type, adds INTERVIEW CONTEXT section with date/company/weak areas.
+- Phase 4: InterviewOnboarding.tsx redirects to `/interview-dashboard` (not `/dashboard`) on completion. MockInterview.tsx "Back to Dashboard" links to `/interview-dashboard`.
+- Phase 4: Mentor.tsx derives `mentorMode` from localStorage `pronggsd-dashboard-view`. Shows `INTERVIEW_QUICK_ACTIONS` when in interview mode, `LEARNING_QUICK_ACTIONS` otherwise. Opening message adapts to mode.
 
 ---
 
@@ -216,6 +233,7 @@ Edge function env vars (set in Supabase dashboard):
 This context system is designed to get better over time. **You are expected to maintain it.**
 
 **After every task, before marking work done:**
+
 1. Did anything behave unexpectedly or differ from what a CLAUDE.md described? → Fix the CLAUDE.md immediately and log it in `AGENT_LOG.md`.
 2. Nothing to log? → Still write a one-liner in `AGENT_LOG.md`: `## YYYY-MM-DD — [task] — No issues found`.
 
