@@ -164,12 +164,22 @@ const SprintCheckin = () => {
       if (data.completed && data.summary) {
         setSummary(data.summary);
         setSuggestedPillars(data.suggested_pillars || []);
-        // Pre-select AI-suggested pillars
-        setSelectedPillars(
-          (data.suggested_pillars || []).map(
-            (p: SuggestedPillar) => p.pillar_name,
-          ),
-        );
+        // Pre-select AI-suggested pillars (match against actual DB pillar names)
+        const dbPillars =
+          queryClient.getQueryData<any[]>(["pillars", userId]) || [];
+        const matchedNames = (data.suggested_pillars || [])
+          .map(
+            (sp: SuggestedPillar) =>
+              dbPillars.find(
+                (p: any) =>
+                  p.name.toLowerCase() === sp.pillar_name.toLowerCase() ||
+                  p.name.toLowerCase().includes(sp.pillar_name.toLowerCase()) ||
+                  sp.pillar_name.toLowerCase().includes(p.name.toLowerCase()),
+              )?.name,
+          )
+          .filter(Boolean)
+          .slice(0, 2);
+        setSelectedPillars(matchedNames);
         setPhase("review");
       }
     } catch (err: any) {
@@ -285,6 +295,30 @@ const SprintCheckin = () => {
             <div className="grid gap-2">
               {(pillars || [])
                 .filter((p) => (p.sort_order || 0) < 100)
+                .sort((a, b) => {
+                  // AI-suggested pillars first
+                  const aIsSuggested = suggestedPillars.some(
+                    (s) =>
+                      s.pillar_name
+                        .toLowerCase()
+                        .includes(a.name.toLowerCase()) ||
+                      a.name
+                        .toLowerCase()
+                        .includes(s.pillar_name.toLowerCase()),
+                  );
+                  const bIsSuggested = suggestedPillars.some(
+                    (s) =>
+                      s.pillar_name
+                        .toLowerCase()
+                        .includes(b.name.toLowerCase()) ||
+                      b.name
+                        .toLowerCase()
+                        .includes(s.pillar_name.toLowerCase()),
+                  );
+                  if (aIsSuggested && !bIsSuggested) return -1;
+                  if (!aIsSuggested && bIsSuggested) return 1;
+                  return (a.sort_order || 0) - (b.sort_order || 0);
+                })
                 .map((pillar) => {
                   const isSelected = selectedPillars.includes(pillar.name);
                   const suggestion = suggestedPillars.find(
@@ -321,6 +355,14 @@ const SprintCheckin = () => {
                           <Badge variant="secondary" className="ml-2 text-xs">
                             Level {pillar.current_level}
                           </Badge>
+                          {suggestion && (
+                            <Badge
+                              variant="outline"
+                              className="ml-1.5 text-xs border-accent/40 text-accent"
+                            >
+                              Recommended
+                            </Badge>
+                          )}
                           {suggestion && (
                             <p className="text-xs text-muted-foreground mt-0.5">
                               {suggestion.reason}
