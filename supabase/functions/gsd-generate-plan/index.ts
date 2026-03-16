@@ -529,6 +529,7 @@ interface BlockParams {
   activePillarCount?: number;
   difficultyAdjustment?: "harder" | "easier" | "same";
   feedbackContext?: string;
+  planType?: "learning" | "interview_prep";
 }
 
 async function generateBlock(
@@ -583,11 +584,8 @@ async function generateBlock(
   // Check if this is the first block for this pillar
   const isFirstBlock = !prevBlocks || prevBlocks.length === 0;
 
-  // For interview plans, use interview intensity; for learning plans, use pacing profile
-  const isInterviewPlan =
-    profile?.interview_intensity &&
-    params.activePillarCount &&
-    params.activePillarCount >= 2;
+  // For interview/crash course plans, always use intensive pacing
+  const isInterviewPlan = params.planType === "interview_prep";
   const pacingProfile = isInterviewPlan
     ? "intensive"
     : profile?.pacing_profile || "steady";
@@ -1262,6 +1260,7 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
           weeklyGoal: wp.weekly_goal,
           profile,
           activePillarCount,
+          planType: "interview_prep",
         });
       } catch (err: any) {
         console.error(
