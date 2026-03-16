@@ -3,7 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Clock, ChevronDown, ChevronUp, ExternalLink, MessageSquare, Loader2 } from "lucide-react";
+import {
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  MessageSquare,
+  Loader2,
+} from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -26,13 +33,21 @@ const PLATFORM_COLORS: Record<string, string> = {
   pronggsd: "bg-orange-500/10 text-orange-600 border-orange-500/20",
 };
 
+/** Strips the "Practice DRILL N: " prefix to get the actual question/prompt. */
+function extractDrillQuestion(action: string): string {
+  return action.replace(/^Practice DRILL \d+:\s*/, "");
+}
+
 /** Constructs a search URL for the given platform and query. */
 function buildSearchUrl(platform: string, query: string): string {
   const encoded = encodeURIComponent(query);
   const p = platform.toLowerCase();
-  if (p.includes("youtube")) return `https://www.youtube.com/results?search_query=${encoded}`;
-  if (p.includes("github")) return `https://github.com/search?q=${encoded}&type=repositories`;
-  if (p.includes("leetcode")) return `https://leetcode.com/problemset/?search=${encoded}`;
+  if (p.includes("youtube"))
+    return `https://www.youtube.com/results?search_query=${encoded}`;
+  if (p.includes("github"))
+    return `https://github.com/search?q=${encoded}&type=repositories`;
+  if (p.includes("leetcode"))
+    return `https://leetcode.com/problemset/?search=${encoded}`;
   if (p.includes("hackerrank")) return `https://www.hackerrank.com/domains`;
   // Fallback: Google search scoped to the platform
   return `https://www.google.com/search?q=${encodeURIComponent(platform + " " + query)}`;
@@ -45,15 +60,19 @@ export const TaskItem = ({ task, onToggle }: TaskItemProps) => {
   const navigate = useNavigate();
   const isCompleted = task.is_completed;
   const isMockInterview = task.resource_type === "mock_interview";
+  const isPracticeDrill = task.action.startsWith("Practice DRILL");
   const platformKey = task.platform.toLowerCase();
-  const badgeColor = PLATFORM_COLORS[platformKey] || "bg-muted text-muted-foreground border-border";
+  const badgeColor =
+    PLATFORM_COLORS[platformKey] ||
+    "bg-muted text-muted-foreground border-border";
 
   // Determine the resource link
-  const resourceUrl = task.resource_type === "curated" && task.url
-    ? task.url
-    : task.search_query
-      ? buildSearchUrl(task.platform, task.search_query)
-      : null;
+  const resourceUrl =
+    task.resource_type === "curated" && task.url
+      ? task.url
+      : task.search_query
+        ? buildSearchUrl(task.platform, task.search_query)
+        : null;
 
   const showWhyToggle = task.why_text && task.why_text.length >= 100;
   const showWhyInline = task.why_text && task.why_text.length < 100;
@@ -84,10 +103,15 @@ export const TaskItem = ({ task, onToggle }: TaskItemProps) => {
       <div className="flex-1 min-w-0 space-y-1">
         {/* Action text + platform badge */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`text-sm ${isCompleted ? "line-through text-muted-foreground" : ""}`}>
+          <span
+            className={`text-sm ${isCompleted ? "line-through text-muted-foreground" : ""}`}
+          >
             {task.action}
           </span>
-          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${badgeColor}`}>
+          <Badge
+            variant="outline"
+            className={`text-[10px] px-1.5 py-0 ${badgeColor}`}
+          >
             {task.platform}
           </Badge>
         </div>
@@ -99,9 +123,12 @@ export const TaskItem = ({ task, onToggle }: TaskItemProps) => {
             onClick={async () => {
               setStarting(true);
               try {
-                const { data, error } = await supabase.functions.invoke("gsd-mock-interview", {
-                  body: { action: "start", task_id: task.id },
-                });
+                const { data, error } = await supabase.functions.invoke(
+                  "gsd-mock-interview",
+                  {
+                    body: { action: "start", task_id: task.id },
+                  },
+                );
                 if (error || !data?.mock_id) {
                   toast.error("Failed to start mock interview");
                   setStarting(false);
@@ -115,22 +142,66 @@ export const TaskItem = ({ task, onToggle }: TaskItemProps) => {
             }}
             className="inline-flex items-center gap-1 text-xs text-orange-500 hover:text-orange-600 font-medium disabled:opacity-50"
           >
-            {starting ? <Loader2 className="h-3 w-3 animate-spin" /> : <MessageSquare className="h-3 w-3" />}
+            {starting ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <MessageSquare className="h-3 w-3" />
+            )}
             {starting ? "Starting..." : "Start Mock Interview"}
           </button>
         )}
 
-        {/* Resource link */}
-        {!isMockInterview && resourceUrl && !isCompleted && (
-          <a
-            href={resourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
-          >
-            {task.resource_type === "curated" ? "Open resource" : `Search ${task.platform}`}
-            <ExternalLink className="h-3 w-3" />
-          </a>
+        {/* Resource link (non-drill, non-mock) */}
+        {!isMockInterview &&
+          !isPracticeDrill &&
+          resourceUrl &&
+          !isCompleted && (
+            <a
+              href={resourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+            >
+              {task.resource_type === "curated"
+                ? "Open resource"
+                : `Search ${task.platform}`}
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+
+        {/* Practice drill: research link + answer button + disclaimer */}
+        {isPracticeDrill && !isCompleted && (
+          <div className="space-y-1">
+            {resourceUrl && (
+              <a
+                href={resourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+              >
+                Search {task.platform}
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+            <button
+              onClick={() =>
+                navigate("/mentor", {
+                  state: {
+                    practiceQuestion: extractDrillQuestion(task.action),
+                    taskId: task.id,
+                  },
+                })
+              }
+              className="inline-flex items-center gap-1 text-xs text-orange-500 hover:text-orange-600 font-medium"
+            >
+              <MessageSquare className="h-3 w-3" />
+              Answer & Get Feedback
+            </button>
+            <p className="text-[10px] text-muted-foreground italic">
+              Research first using the link above, then answer here for AI
+              feedback
+            </p>
+          </div>
         )}
 
         {/* Why text — inline for short, toggle for long */}
@@ -144,10 +215,16 @@ export const TaskItem = ({ task, onToggle }: TaskItemProps) => {
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               Why?
-              {whyExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {whyExpanded ? (
+                <ChevronUp className="h-3 w-3" />
+              ) : (
+                <ChevronDown className="h-3 w-3" />
+              )}
             </button>
             {whyExpanded && (
-              <p className="text-xs text-muted-foreground mt-1">{task.why_text}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {task.why_text}
+              </p>
             )}
           </div>
         )}

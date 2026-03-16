@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useDemo, DEMO_MENTOR_MESSAGES } from "@/hooks/useDemo";
 import { useMentorName } from "@/hooks/useMentorName";
@@ -215,6 +216,14 @@ const Mentor = () => {
   const { mentorName } = useMentorName();
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const practiceState = location.state as {
+    practiceQuestion?: string;
+    taskId?: string;
+  } | null;
+  const [activePracticeQuestion, setActivePracticeQuestion] = useState<
+    string | null
+  >(practiceState?.practiceQuestion || null);
 
   // Derive mentor mode from localStorage (set by Dashboard / CrashCourseDashboard on mount)
   const mentorMode =
@@ -252,6 +261,19 @@ const Mentor = () => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Inject practice drill question as a local-only assistant message
+  useEffect(() => {
+    if (practiceState?.practiceQuestion) {
+      const questionMsg: MentorMessage = {
+        role: "assistant",
+        content: `**Practice Drill**\n\n${practiceState.practiceQuestion}\n\n*Type your answer below. I'll give you honest, detailed feedback.*`,
+      };
+      setMessages((prev) => [...prev, questionMsg]);
+      // Clear router state so refresh doesn't re-inject
+      window.history.replaceState({}, "");
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleTextareaInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
     const el = e.currentTarget;
     el.style.height = "auto";
@@ -266,11 +288,18 @@ const Mentor = () => {
   };
 
   const sendMessage = async (text?: string) => {
-    const messageText = text || input.trim();
-    if (!messageText || loading) return;
-    if (messageText.length > MAX_MENTOR_MSG_LENGTH) {
+    const rawText = text || input.trim();
+    if (!rawText || loading) return;
+    if (rawText.length > MAX_MENTOR_MSG_LENGTH) {
       toast.error(`Message too long. Max ${MAX_MENTOR_MSG_LENGTH} characters.`);
       return;
+    }
+
+    // Wrap first message with practice drill context if active
+    let messageText = rawText;
+    if (activePracticeQuestion) {
+      messageText = `[PRACTICE DRILL FEEDBACK REQUEST]\nQuestion: ${activePracticeQuestion}\nMy answer: ${rawText}\n[/PRACTICE DRILL FEEDBACK REQUEST]`;
+      setActivePracticeQuestion(null);
     }
 
     if (!text) {
@@ -278,7 +307,8 @@ const Mentor = () => {
       if (inputRef.current) inputRef.current.style.height = "auto";
     }
 
-    const userMsg: MentorMessage = { role: "user", content: messageText };
+    // Display raw text in chat bubble, send wrapped text to API/DB
+    const userMsg: MentorMessage = { role: "user", content: rawText };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setLoading(true);
@@ -444,7 +474,11 @@ const Mentor = () => {
                         }
                         onInput={handleTextareaInput}
                         onKeyDown={handleKeyDown}
-                        placeholder={`Ask ${mentorName} anything...`}
+                        placeholder={
+                          activePracticeQuestion
+                            ? "Type your answer..."
+                            : `Ask ${mentorName} anything...`
+                        }
                         disabled={loading}
                         rows={1}
                         className={`${TEXTAREA_BASE} min-h-[80px] max-h-[200px] px-4 pt-5 pb-3`}
@@ -638,7 +672,11 @@ const Mentor = () => {
                         }
                         onInput={handleTextareaInput}
                         onKeyDown={handleKeyDown}
-                        placeholder={`Ask ${mentorName} anything...`}
+                        placeholder={
+                          activePracticeQuestion
+                            ? "Type your answer..."
+                            : `Ask ${mentorName} anything...`
+                        }
                         disabled={loading}
                         rows={1}
                         className={`${TEXTAREA_BASE} min-h-[56px] max-h-[200px] px-4 pt-5 pb-3`}
