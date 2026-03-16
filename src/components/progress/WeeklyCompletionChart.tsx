@@ -31,7 +31,7 @@ export const WeeklyCompletionChart = ({
 }: WeeklyCompletionChartProps) => {
   const isSprint = planFormat === "sprint";
   const unitPrefix = isSprint ? "S" : "W";
-  const progressLabel = isSprint ? "Sprint Progress" : "{progressLabel}";
+  const progressLabel = isSprint ? "Sprint Progress" : "Weekly Progress";
 
   const data = useMemo(() => {
     // Map block ID → week number

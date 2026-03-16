@@ -92,15 +92,21 @@ export const PlanSummaryStrip = ({
         </div>
       </div>
 
-      {/* Week indicators */}
+      {/* Week/Sprint indicators */}
       <div className="flex flex-wrap gap-1.5">
-        {planOutline.weeks.map((week) => {
+        {(isSprint
+          ? [...weekStatuses.keys()]
+              .sort((a, b) => a - b)
+              .map((n) => ({ week_number: n }))
+          : planOutline.weeks || []
+        ).map((week) => {
           const status = weekStatuses.get(week.week_number) || "future";
+          const label = isSprint ? "Sprint" : "Week";
           return (
             <div
               key={week.week_number}
               className="flex items-center justify-center h-7 w-7 rounded-md text-[10px] font-medium"
-              title={`Week ${week.week_number}: ${status}`}
+              title={`${label} ${week.week_number}: ${status}`}
             >
               {status === "completed" && (
                 <div className="h-7 w-7 rounded-md bg-green-500/20 flex items-center justify-center">
