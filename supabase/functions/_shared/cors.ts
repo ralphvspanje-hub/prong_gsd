@@ -1,4 +1,5 @@
 const ALLOWED_ORIGINS = [
+  "https://prong-gsd.vercel.app",
   "https://dailyprong-web.vercel.app",
   "http://localhost:8080",
 ];
