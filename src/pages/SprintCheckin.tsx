@@ -165,6 +165,7 @@ const SprintCheckin = () => {
     if (!text || isSending || !checkinId) return;
 
     setInput("");
+    if (inputRef.current) inputRef.current.style.height = "auto";
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setIsSending(true);
 
@@ -212,6 +213,13 @@ const SprintCheckin = () => {
       setIsSending(false);
     }
   }, [input, isSending, checkinId]);
+
+  // Auto-resize textarea
+  const handleTextareaInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
+    const el = e.currentTarget;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  };
 
   // Handle key press
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -489,13 +497,12 @@ const SprintCheckin = () => {
             <textarea
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => setInput(e.target.value.slice(0, 2000))}
+              onInput={handleTextareaInput}
               onKeyDown={handleKeyDown}
               placeholder="How did the sprint go?"
               rows={1}
-              maxLength={2000}
-              className={TEXTAREA_BASE}
-              style={{ minHeight: "2.5rem", maxHeight: "8rem" }}
+              className={`${TEXTAREA_BASE} min-h-[2.5rem] max-h-[200px]`}
               disabled={isSending}
             />
             <Button
