@@ -39,9 +39,17 @@ export const Layout = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
   const userId = user?.id;
 
-  const isCrashCourseMode = CRASH_COURSE_PATHS.some((p) =>
+  const isOnCrashCoursePath = CRASH_COURSE_PATHS.some((p) =>
     location.pathname.startsWith(p),
   );
+  const isCrashCourseMode =
+    isOnCrashCoursePath ||
+    localStorage.getItem("pronggsd-dashboard-view") === "interview_prep";
+
+  // Extract active crash course plan ID from URL, fall back to localStorage for shared pages
+  const crashCoursePlanId =
+    location.pathname.match(/^\/crash-course\/([^/]+)/)?.[1] ||
+    localStorage.getItem("pronggsd-active-crashcourse-id");
 
   // Query active crash course plans for the header button
   const { data: crashPlans } = useQuery({
@@ -99,7 +107,9 @@ export const Layout = ({ children }: { children: ReactNode }) => {
   // Crash course nav items (swapped when on crash course pages)
   const crashCourseNavItems = [
     {
-      path: "/crash-course",
+      path: crashCoursePlanId
+        ? `/crash-course/${crashCoursePlanId}`
+        : "/crash-course",
       label: "Prep",
       icon: Target,
       mobileVisible: true,
@@ -126,6 +136,16 @@ export const Layout = ({ children }: { children: ReactNode }) => {
   ];
 
   const navItems = isCrashCourseMode ? crashCourseNavItems : learningNavItems;
+
+  // Active highlight: startsWith for crash course Prep item, exact match for others
+  const isActive = (itemPath: string) => {
+    if (
+      itemPath.startsWith("/crash-course") &&
+      location.pathname.startsWith("/crash-course")
+    )
+      return true;
+    return location.pathname === itemPath;
+  };
 
   // Logo links to the appropriate dashboard
   const homePath = isCrashCourseMode ? "/crash-course" : "/dashboard";
@@ -159,9 +179,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
             {navItems.map((item) => (
               <Link key={item.path} to={item.path}>
                 <Button
-                  variant={
-                    location.pathname === item.path ? "secondary" : "ghost"
-                  }
+                  variant={isActive(item.path) ? "secondary" : "ghost"}
                   size="sm"
                   className="gap-2"
                 >
@@ -227,7 +245,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`flex-col gap-0.5 h-auto py-1.5 px-2 ${location.pathname === item.path ? "text-accent" : "text-muted-foreground"}`}
+                  className={`flex-col gap-0.5 h-auto py-1.5 px-2 ${isActive(item.path) ? "text-accent" : "text-muted-foreground"}`}
                 >
                   <item.icon className="h-4 w-4" />
                   <span className="text-[10px] truncate max-w-[48px]">

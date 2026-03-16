@@ -60,18 +60,28 @@ const PlanOverview = () => {
     (localStorage.getItem("pronggsd-dashboard-view") as
       | "learning"
       | "interview_prep") || "learning";
+  const activeCrashPlanId = localStorage.getItem(
+    "pronggsd-active-crashcourse-id",
+  );
+  const isCrashCourse = planType === "interview_prep";
 
-  // Active plan (scoped by plan_type)
+  // Active plan (scoped by plan_type, and specific crash course ID if available)
   const { data: plan, isLoading: planLoading } = useQuery({
-    queryKey: ["learning-plan", userId, planType],
+    queryKey: ["learning-plan", userId, planType, activeCrashPlanId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("learning_plans")
         .select("*")
         .eq("user_id", userId!)
-        .eq("is_active", true)
-        .eq("plan_type", planType)
-        .maybeSingle();
+        .eq("is_active", true);
+
+      if (isCrashCourse && activeCrashPlanId) {
+        query = query.eq("id", activeCrashPlanId);
+      } else {
+        query = query.eq("plan_type", planType);
+      }
+
+      const { data, error } = await query.maybeSingle();
       if (error) throw error;
       return data as LearningPlan | null;
     },
@@ -124,9 +134,14 @@ const PlanOverview = () => {
     return statusMap;
   }, [allBlocks]);
 
-  // No-plan redirect to context upload (then onboarding)
+  // No-plan redirect — crash course goes back to selector, learning to context upload
   if (!planLoading && !plan && userId) {
-    return <Navigate to="/context-upload" replace />;
+    return (
+      <Navigate
+        to={isCrashCourse ? "/crash-course" : "/context-upload"}
+        replace
+      />
+    );
   }
 
   if (planLoading) {
@@ -142,7 +157,13 @@ const PlanOverview = () => {
     );
   }
 
-  if (!plan) return <Navigate to="/context-upload" replace />;
+  if (!plan)
+    return (
+      <Navigate
+        to={isCrashCourse ? "/crash-course" : "/context-upload"}
+        replace
+      />
+    );
 
   const outline = plan.plan_outline as unknown as PlanOutline;
 
@@ -152,13 +173,20 @@ const PlanOverview = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="space-y-1">
-            <Link to="/dashboard">
+            <Link
+              to={
+                isCrashCourse && activeCrashPlanId
+                  ? `/crash-course/${activeCrashPlanId}`
+                  : "/dashboard"
+              }
+            >
               <Button
                 variant="ghost"
                 size="sm"
                 className="gap-1 -ml-2 mb-1 text-muted-foreground"
               >
-                <ArrowLeft className="h-3.5 w-3.5" /> Back to Today
+                <ArrowLeft className="h-3.5 w-3.5" />{" "}
+                {isCrashCourse ? "Back to Prep" : "Back to Today"}
               </Button>
             </Link>
             <h1 className="font-serif text-2xl font-bold">

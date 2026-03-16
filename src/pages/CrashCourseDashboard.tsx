@@ -58,10 +58,11 @@ const CrashCourseDashboard = () => {
   const { planId } = useParams<{ planId: string }>();
   const userId = user?.id;
 
-  // Set localStorage so shared pages (/plan, /mentor) know we're in crash course mode
+  // Set localStorage so shared pages (/plan, /mentor, /progress, /history) know we're in crash course mode
   useMemo(() => {
     localStorage.setItem("pronggsd-dashboard-view", "interview_prep");
-  }, []);
+    if (planId) localStorage.setItem("pronggsd-active-crashcourse-id", planId);
+  }, [planId]);
 
   // Modal state
   const [checkinBlock, setCheckinBlock] = useState<PlanBlock | null>(null);

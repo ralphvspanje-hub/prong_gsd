@@ -20,39 +20,66 @@ type Pillar = Tables<"pillars">;
 
 interface PlanOutline {
   total_weeks: number;
-  weeks: { week_number: number; pillars: { pillar_name: string; weekly_goal: string }[] }[];
+  weeks: {
+    week_number: number;
+    pillars: { pillar_name: string; weekly_goal: string }[];
+  }[];
 }
 
 const Progress = () => {
   const { user } = useAuth();
   const userId = user?.id;
 
-  // Active learning plan
+  // Determine which plan type to show based on dashboard view mode
+  const planType =
+    (localStorage.getItem("pronggsd-dashboard-view") as
+      | "learning"
+      | "interview_prep") || "learning";
+  const activeCrashPlanId = localStorage.getItem(
+    "pronggsd-active-crashcourse-id",
+  );
+  const isCrashCourse = planType === "interview_prep";
+
+  // Active plan (scoped by plan_type, and specific crash course ID if available)
   const { data: plan, isLoading: planLoading } = useQuery({
-    queryKey: ["learning-plan", userId],
+    queryKey: ["learning-plan", userId, planType, activeCrashPlanId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("learning_plans")
         .select("*")
         .eq("user_id", userId!)
-        .eq("is_active", true)
-        .maybeSingle();
+        .eq("is_active", true);
+
+      if (isCrashCourse && activeCrashPlanId) {
+        query = query.eq("id", activeCrashPlanId);
+      } else {
+        query = query.eq("plan_type", planType);
+      }
+
+      const { data, error } = await query.maybeSingle();
       if (error) throw error;
       return data as LearningPlan | null;
     },
     enabled: !!userId,
   });
 
-  // Pillars
+  // Pillars (crash course pillars use sort_order >= 100)
   const { data: pillars = [], isLoading: pillarsLoading } = useQuery({
-    queryKey: ["pillars", userId],
+    queryKey: ["pillars", userId, isCrashCourse],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("pillars")
         .select("*")
         .eq("user_id", userId!)
-        .eq("is_active", true)
-        .order("sort_order");
+        .eq("is_active", true);
+
+      if (isCrashCourse) {
+        query = query.gte("sort_order", 100);
+      } else {
+        query = query.lt("sort_order", 100);
+      }
+
+      const { data, error } = await query.order("sort_order");
       if (error) throw error;
       return (data || []) as Pillar[];
     },
@@ -143,7 +170,8 @@ const Progress = () => {
         <div className="max-w-3xl mx-auto space-y-8">
           <h1 className="font-serif text-2xl font-bold">Progress</h1>
           <p className="text-sm text-muted-foreground text-center py-8">
-            No active plan yet. Complete onboarding to start tracking your progress.
+            No active plan yet. Complete onboarding to start tracking your
+            progress.
           </p>
         </div>
       </Layout>
@@ -165,7 +193,10 @@ const Progress = () => {
         />
 
         {/* B. Big streak + Activity heatmap */}
-        <ActivitySection progress={progress || null} completedTasks={completedTasks} />
+        <ActivitySection
+          progress={progress || null}
+          completedTasks={completedTasks}
+        />
 
         {/* C. Weekly completion chart */}
         <WeeklyCompletionChart tasks={allTasks} blocks={allBlocks} />

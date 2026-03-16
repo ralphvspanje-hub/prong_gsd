@@ -53,9 +53,11 @@ const Dashboard = () => {
   const queryClient = useQueryClient();
   const userId = user?.id;
 
-  // Set localStorage so shared pages (/plan, /mentor) know we're in learning mode
+  // Set localStorage so shared pages (/plan, /mentor, /progress, /history) know we're in learning mode
   useMemo(() => {
     localStorage.setItem("pronggsd-dashboard-view", "learning");
+    localStorage.removeItem("pronggsd-active-crashcourse-id");
+    localStorage.removeItem("pronggsd-crashcourse-type");
   }, []);
 
   // Modal state

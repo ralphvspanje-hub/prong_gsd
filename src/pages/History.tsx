@@ -26,34 +26,75 @@ const History = () => {
   const [pillarFilter, setPillarFilter] = useState("all");
   const [weekFilter, setWeekFilter] = useState("all");
 
-  // Pillars (for filter dropdown + name lookup)
-  const { data: pillars = [] } = useQuery({
-    queryKey: ["pillars", userId],
+  // Determine which plan type to show based on dashboard view mode
+  const planType =
+    (localStorage.getItem("pronggsd-dashboard-view") as
+      | "learning"
+      | "interview_prep") || "learning";
+  const activeCrashPlanId = localStorage.getItem(
+    "pronggsd-active-crashcourse-id",
+  );
+  const isCrashCourse = planType === "interview_prep";
+
+  // Active plan (to scope blocks)
+  const { data: activePlan } = useQuery({
+    queryKey: ["active-plan-for-history", userId, planType, activeCrashPlanId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
+        .from("learning_plans")
+        .select("id")
+        .eq("user_id", userId!)
+        .eq("is_active", true);
+
+      if (isCrashCourse && activeCrashPlanId) {
+        query = query.eq("id", activeCrashPlanId);
+      } else {
+        query = query.eq("plan_type", planType);
+      }
+
+      const { data, error } = await query.maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!userId,
+  });
+
+  // Pillars (for filter dropdown + name lookup, scoped by plan type)
+  const { data: pillars = [] } = useQuery({
+    queryKey: ["pillars", userId, isCrashCourse],
+    queryFn: async () => {
+      let query = supabase
         .from("pillars")
         .select("id, name")
         .eq("user_id", userId!)
         .eq("is_active", true);
+
+      if (isCrashCourse) {
+        query = query.gte("sort_order", 100);
+      } else {
+        query = query.lt("sort_order", 100);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
     enabled: !!userId,
   });
 
-  // All plan blocks for user
+  // Plan blocks scoped to active plan
   const { data: allBlocks = [], isLoading: blocksLoading } = useQuery({
-    queryKey: ["plan-blocks-history", userId],
+    queryKey: ["plan-blocks-history", activePlan?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("plan_blocks")
         .select("*")
-        .eq("user_id", userId!)
+        .eq("plan_id", activePlan!.id)
         .order("completed_at", { ascending: false, nullsFirst: false });
       if (error) throw error;
       return (data || []) as PlanBlock[];
     },
-    enabled: !!userId,
+    enabled: !!activePlan?.id,
   });
 
   // All tasks for those blocks
@@ -93,7 +134,9 @@ const History = () => {
 
   // Available week numbers for filter
   const availableWeeks = useMemo(() => {
-    const weeks = [...new Set(allBlocks.map((b) => b.week_number))].sort((a, b) => a - b);
+    const weeks = [...new Set(allBlocks.map((b) => b.week_number))].sort(
+      (a, b) => a - b,
+    );
     return weeks;
   }, [allBlocks]);
 
@@ -104,7 +147,8 @@ const History = () => {
       // Pillar filter
       if (pillarFilter !== "all" && b.pillar_id !== pillarFilter) return false;
       // Week filter
-      if (weekFilter !== "all" && b.week_number !== Number(weekFilter)) return false;
+      if (weekFilter !== "all" && b.week_number !== Number(weekFilter))
+        return false;
       // Search filter — match block title, weekly_goal, or any task action
       if (lowerSearch) {
         const blockMatch =
@@ -127,7 +171,10 @@ const History = () => {
       if (!a.is_completed && b.is_completed) return 1;
       // Both completed: sort by completed_at desc
       if (a.completed_at && b.completed_at)
-        return new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime();
+        return (
+          new Date(b.completed_at).getTime() -
+          new Date(a.completed_at).getTime()
+        );
       // Both incomplete: sort by week_number
       return a.week_number - b.week_number;
     });
