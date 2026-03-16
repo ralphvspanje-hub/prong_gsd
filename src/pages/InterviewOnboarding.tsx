@@ -3,14 +3,32 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Send, Loader2, Zap, Check, Target, Clock, AlertTriangle } from "lucide-react";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+import {
+  Send,
+  Loader2,
+  Zap,
+  Check,
+  Target,
+  Clock,
+  AlertTriangle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -54,10 +72,13 @@ const InterviewOnboarding = () => {
   const [phase, setPhase] = useState<"chat" | "review">("chat");
   const [outputs, setOutputs] = useState<InterviewPrepOutputs | null>(null);
   const [saving, setSaving] = useState(false);
-  const [savingMessage, setSavingMessage] = useState("Setting up your prep plan...");
+  const [savingMessage, setSavingMessage] = useState(
+    "Setting up your prep plan...",
+  );
   // Editable company context on review screen
   const [companyName, setCompanyName] = useState("");
   const [companyContext, setCompanyContext] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const startedRef = useRef(false);
@@ -89,9 +110,12 @@ const InterviewOnboarding = () => {
   const startConversation = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("gsd-interview-onboarding", {
-        body: { messages: [], action: "start" },
-      });
+      const { data, error } = await supabase.functions.invoke(
+        "gsd-interview-onboarding",
+        {
+          body: { messages: [], action: "start" },
+        },
+      );
       if (error) {
         let msg = error.message;
         try {
@@ -118,14 +142,20 @@ const InterviewOnboarding = () => {
     }
     setInput("");
     if (inputRef.current) inputRef.current.style.height = "auto";
-    const newMessages = [...messages, { role: "user" as const, content: userMessage }];
+    const newMessages = [
+      ...messages,
+      { role: "user" as const, content: userMessage },
+    ];
     setMessages(newMessages);
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("gsd-interview-onboarding", {
-        body: { messages: newMessages, action: "continue" },
-      });
+      const { data, error } = await supabase.functions.invoke(
+        "gsd-interview-onboarding",
+        {
+          body: { messages: newMessages, action: "continue" },
+        },
+      );
       if (error) {
         let msg = error.message;
         try {
@@ -140,9 +170,18 @@ const InterviewOnboarding = () => {
         setCompanyName(data.outputs.company || "");
         setCompanyContext(data.outputs.company_context || "");
         setPhase("review");
-        setMessages([...newMessages, { role: "assistant", content: data.message || "Here's your prep plan!" }]);
+        setMessages([
+          ...newMessages,
+          {
+            role: "assistant",
+            content: data.message || "Here's your prep plan!",
+          },
+        ]);
       } else if (data.message) {
-        setMessages([...newMessages, { role: "assistant", content: data.message }]);
+        setMessages([
+          ...newMessages,
+          { role: "assistant", content: data.message },
+        ]);
       }
     } catch (err: any) {
       toast.error("Failed to send message: " + err.message);
@@ -160,7 +199,10 @@ const InterviewOnboarding = () => {
         user_id: user.id,
         interview_target_role: outputs.target_role,
         interview_company: companyName || null,
-        interview_company_context: companyContext || null,
+        interview_company_context:
+          [companyContext, jobDescription]
+            .filter(Boolean)
+            .join("\n\nJOB DESCRIPTION:\n") || null,
         interview_date: outputs.interview_date || null,
         interview_intensity: outputs.intensity,
         interview_weak_areas: outputs.weak_areas,
@@ -176,15 +218,19 @@ const InterviewOnboarding = () => {
       const pillarIds: string[] = [];
       for (let i = 0; i < outputs.interview_pillars.length; i++) {
         const p = outputs.interview_pillars[i];
-        const { data: pillarData } = await supabase.from("pillars").insert({
-          user_id: user.id,
-          name: p.name,
-          description: p.description,
-          why_it_matters: `Interview prep focus: ${p.focus_areas.join(", ")}`,
-          starting_level: p.starting_level,
-          current_level: p.starting_level,
-          sort_order: 100 + i, // High sort_order to avoid collision with main pillars
-        }).select().single();
+        const { data: pillarData } = await supabase
+          .from("pillars")
+          .insert({
+            user_id: user.id,
+            name: p.name,
+            description: p.description,
+            why_it_matters: `Interview prep focus: ${p.focus_areas.join(", ")}`,
+            starting_level: p.starting_level,
+            current_level: p.starting_level,
+            sort_order: 100 + i, // High sort_order to avoid collision with main pillars
+          })
+          .select()
+          .single();
 
         if (pillarData) {
           pillarIds.push(pillarData.id);
@@ -201,13 +247,18 @@ const InterviewOnboarding = () => {
 
       // Generate the interview prep plan
       setSavingMessage("Building your crash course...");
-      const { error: planError } = await supabase.functions.invoke("gsd-generate-plan", {
-        body: { mode: "interview_plan" },
-      });
+      const { error: planError } = await supabase.functions.invoke(
+        "gsd-generate-plan",
+        {
+          body: { mode: "interview_plan" },
+        },
+      );
 
       if (planError) {
         console.error("Plan generation failed:", planError);
-        toast.error("Profile saved, but plan generation failed. Please try again.");
+        toast.error(
+          "Profile saved, but plan generation failed. Please try again.",
+        );
         setSaving(false);
         return;
       }
@@ -224,7 +275,13 @@ const InterviewOnboarding = () => {
   };
 
   const daysUntilInterview = outputs?.interview_date
-    ? Math.max(0, Math.ceil((new Date(outputs.interview_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    ? Math.max(
+        0,
+        Math.ceil(
+          (new Date(outputs.interview_date).getTime() - Date.now()) /
+            (1000 * 60 * 60 * 24),
+        ),
+      )
     : null;
 
   return (
@@ -233,13 +290,21 @@ const InterviewOnboarding = () => {
         <div className="container flex h-14 items-center justify-between">
           <div className="flex items-center gap-2">
             <Target className="h-5 w-5 text-orange-500" />
-            <span className="font-serif text-lg font-bold">Interview Prep Setup</span>
+            <span className="font-serif text-lg font-bold">
+              Interview Prep Setup
+            </span>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/dashboard")} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <button
+              onClick={() => navigate("/dashboard")}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
               Back to Dashboard
             </button>
-            <button onClick={signOut} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <button
+              onClick={signOut}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
               Sign out
             </button>
           </div>
@@ -258,7 +323,9 @@ const InterviewOnboarding = () => {
                     className="flex flex-col items-center justify-center py-16 gap-3 text-center"
                   >
                     <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
-                    <p className="text-base text-muted-foreground">Setting up your prep coach...</p>
+                    <p className="text-base text-muted-foreground">
+                      Setting up your prep coach...
+                    </p>
                   </motion.div>
                 )}
 
@@ -271,20 +338,38 @@ const InterviewOnboarding = () => {
                       transition={{ duration: 0.3 }}
                       className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                     >
-                      <div className={`max-w-[85%] rounded-lg px-4 py-3 text-base leading-relaxed ${
-                        msg.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-card text-card-foreground border border-border"
-                      }`}>
+                      <div
+                        className={`max-w-[85%] rounded-lg px-4 py-3 text-base leading-relaxed ${
+                          msg.role === "user"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-card text-card-foreground border border-border"
+                        }`}
+                      >
                         {msg.role === "assistant" ? (
                           <ReactMarkdown
                             components={{
-                              p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                              p: ({ children }) => (
+                                <p className="mb-3 last:mb-0">{children}</p>
+                              ),
+                              strong: ({ children }) => (
+                                <strong className="font-semibold">
+                                  {children}
+                                </strong>
+                              ),
                               hr: () => <hr className="my-3 border-border" />,
-                              ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1">{children}</ol>,
-                              ul: ({ children }) => <ul className="list-disc pl-5 space-y-1">{children}</ul>,
-                              li: ({ children }) => <li className="pl-0.5">{children}</li>,
+                              ol: ({ children }) => (
+                                <ol className="list-decimal pl-5 space-y-1">
+                                  {children}
+                                </ol>
+                              ),
+                              ul: ({ children }) => (
+                                <ul className="list-disc pl-5 space-y-1">
+                                  {children}
+                                </ul>
+                              ),
+                              li: ({ children }) => (
+                                <li className="pl-0.5">{children}</li>
+                              ),
                             }}
                           >
                             {msg.content}
@@ -297,7 +382,11 @@ const InterviewOnboarding = () => {
                   ))}
                 </AnimatePresence>
                 {loading && messages.length > 0 && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex justify-start"
+                  >
                     <div className="bg-card border border-border rounded-lg px-4 py-3">
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     </div>
@@ -314,10 +403,16 @@ const InterviewOnboarding = () => {
                     <textarea
                       ref={inputRef}
                       value={input}
-                      onChange={(e) => setInput(e.target.value.slice(0, MAX_MSG_LENGTH))}
+                      onChange={(e) =>
+                        setInput(e.target.value.slice(0, MAX_MSG_LENGTH))
+                      }
                       onInput={handleTextareaInput}
                       onKeyDown={handleKeyDown}
-                      placeholder={messages.length === 0 ? "Waiting for your prep coach..." : "Tell me about your interview..."}
+                      placeholder={
+                        messages.length === 0
+                          ? "Waiting for your prep coach..."
+                          : "Tell me about your interview..."
+                      }
                       disabled={loading || messages.length === 0}
                       rows={1}
                       className={`${TEXTAREA_BASE} min-h-[80px] max-h-[200px] px-4 pt-5 pb-3`}
@@ -354,8 +449,12 @@ const InterviewOnboarding = () => {
         {phase === "review" && outputs && (
           <div className="space-y-8">
             <div className="text-center space-y-2">
-              <h1 className="font-serif text-3xl font-bold">Your Interview Prep Plan</h1>
-              <p className="text-muted-foreground">Review your crash course setup before we build your daily plan.</p>
+              <h1 className="font-serif text-3xl font-bold">
+                Your Interview Prep Plan
+              </h1>
+              <p className="text-muted-foreground">
+                Review your crash course setup before we build your daily plan.
+              </p>
             </div>
 
             {/* Overview Card */}
@@ -365,7 +464,9 @@ const InterviewOnboarding = () => {
                   <div className="flex items-center gap-3">
                     <Target className="h-5 w-5 text-orange-500 shrink-0" />
                     <div>
-                      <p className="text-xs text-muted-foreground">Target Role</p>
+                      <p className="text-xs text-muted-foreground">
+                        Target Role
+                      </p>
                       <p className="font-medium">{outputs.target_role}</p>
                     </div>
                   </div>
@@ -373,22 +474,37 @@ const InterviewOnboarding = () => {
                     <Clock className="h-5 w-5 text-orange-500 shrink-0" />
                     <div>
                       <p className="text-xs text-muted-foreground">Duration</p>
-                      <p className="font-medium">{outputs.plan_duration_weeks} week{outputs.plan_duration_weeks > 1 ? "s" : ""}</p>
+                      <p className="font-medium">
+                        {outputs.plan_duration_weeks} week
+                        {outputs.plan_duration_weeks > 1 ? "s" : ""}
+                      </p>
                     </div>
                   </div>
                   {daysUntilInterview !== null && (
                     <div className="flex items-center gap-3">
-                      <AlertTriangle className={`h-5 w-5 shrink-0 ${daysUntilInterview <= 7 ? "text-red-500" : "text-orange-500"}`} />
+                      <AlertTriangle
+                        className={`h-5 w-5 shrink-0 ${daysUntilInterview <= 7 ? "text-red-500" : "text-orange-500"}`}
+                      />
                       <div>
-                        <p className="text-xs text-muted-foreground">Interview In</p>
-                        <p className="font-medium">{daysUntilInterview} day{daysUntilInterview !== 1 ? "s" : ""}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Interview In
+                        </p>
+                        <p className="font-medium">
+                          {daysUntilInterview} day
+                          {daysUntilInterview !== 1 ? "s" : ""}
+                        </p>
                       </div>
                     </div>
                   )}
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Badge variant="secondary" className="bg-orange-500/10 text-orange-600 dark:text-orange-400">
-                    {outputs.intensity === "100_percent" ? "Full Intensity" : "Adapted Pace"}
+                  <Badge
+                    variant="secondary"
+                    className="bg-orange-500/10 text-orange-600 dark:text-orange-400"
+                  >
+                    {outputs.intensity === "100_percent"
+                      ? "Full Intensity"
+                      : "Adapted Pace"}
                   </Badge>
                   <Badge variant="secondary">{outputs.interview_format}</Badge>
                 </div>
@@ -397,9 +513,12 @@ const InterviewOnboarding = () => {
 
             {/* Company Context (editable) */}
             <section className="space-y-3">
-              <h2 className="font-serif text-xl font-semibold">Company Context (optional)</h2>
+              <h2 className="font-serif text-xl font-semibold">
+                Company Context (optional)
+              </h2>
               <p className="text-sm text-muted-foreground">
-                Add details about the company or role to make your prep more targeted. You can skip this.
+                Add details about the company or role to make your prep more
+                targeted. You can skip this.
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -412,7 +531,9 @@ const InterviewOnboarding = () => {
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="company-context">Company / Product Description</Label>
+                  <Label htmlFor="company-context">
+                    Company / Product Description
+                  </Label>
                   <Textarea
                     id="company-context"
                     placeholder="e.g., Music streaming platform focused on personalization and data-driven product decisions..."
@@ -421,16 +542,34 @@ const InterviewOnboarding = () => {
                     rows={3}
                   />
                 </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="job-description">
+                    Job Description (optional)
+                  </Label>
+                  <Textarea
+                    id="job-description"
+                    placeholder="Paste the job description or key requirements here to tailor your prep..."
+                    value={jobDescription}
+                    onChange={(e) => setJobDescription(e.target.value)}
+                    rows={4}
+                  />
+                </div>
               </div>
             </section>
 
             {/* Weak Areas */}
             {outputs.weak_areas.length > 0 && (
               <section className="space-y-3">
-                <h2 className="font-serif text-xl font-semibold">Focus Areas</h2>
+                <h2 className="font-serif text-xl font-semibold">
+                  Focus Areas
+                </h2>
                 <div className="flex flex-wrap gap-2">
                   {outputs.weak_areas.map((area, i) => (
-                    <Badge key={i} variant="outline" className="text-sm border-orange-500/30">
+                    <Badge
+                      key={i}
+                      variant="outline"
+                      className="text-sm border-orange-500/30"
+                    >
                       {area}
                     </Badge>
                   ))}
@@ -445,21 +584,36 @@ const InterviewOnboarding = () => {
                 {outputs.interview_pillars.map((p, i) => (
                   <Card key={i} className="border-border">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-base font-serif">{p.name}</CardTitle>
-                      <CardDescription className="text-sm">{p.description}</CardDescription>
+                      <CardTitle className="text-base font-serif">
+                        {p.name}
+                      </CardTitle>
+                      <CardDescription className="text-sm">
+                        {p.description}
+                      </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">Level:</span>
+                        <span className="text-sm text-muted-foreground">
+                          Level:
+                        </span>
                         <div className="flex gap-1">
                           {[1, 2, 3, 4, 5].map((l) => (
-                            <div key={l} className={`h-2 w-2 rounded-full ${l <= p.starting_level ? "bg-orange-500" : "bg-muted"}`} />
+                            <div
+                              key={l}
+                              className={`h-2 w-2 rounded-full ${l <= p.starting_level ? "bg-orange-500" : "bg-muted"}`}
+                            />
                           ))}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-1">
                         {p.focus_areas.map((area, j) => (
-                          <Badge key={j} variant="secondary" className="text-xs">{area}</Badge>
+                          <Badge
+                            key={j}
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            {area}
+                          </Badge>
                         ))}
                       </div>
                     </CardContent>
@@ -469,8 +623,14 @@ const InterviewOnboarding = () => {
             </section>
 
             <div className="flex gap-3 justify-center pt-4 pb-8">
-              <Button variant="outline" onClick={() => setPhase("chat")}>Adjust Something</Button>
-              <Button onClick={handleConfirm} disabled={saving} className="gap-2 bg-orange-500 hover:bg-orange-600 text-white">
+              <Button variant="outline" onClick={() => setPhase("chat")}>
+                Adjust Something
+              </Button>
+              <Button
+                onClick={handleConfirm}
+                disabled={saving}
+                className="gap-2 bg-orange-500 hover:bg-orange-600 text-white"
+              >
                 {saving ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
