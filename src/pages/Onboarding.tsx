@@ -280,15 +280,18 @@ const Onboarding = () => {
         const p = outputs.pillars[i];
         const { data: pillarData } = await supabase
           .from("pillars")
-          .insert({
-            user_id: user.id,
-            name: p.name,
-            description: p.description,
-            why_it_matters: p.why_it_matters,
-            starting_level: p.starting_level,
-            current_level: p.starting_level,
-            sort_order: i,
-          })
+          .upsert(
+            {
+              user_id: user.id,
+              name: p.name,
+              description: p.description,
+              why_it_matters: p.why_it_matters,
+              starting_level: p.starting_level,
+              current_level: p.starting_level,
+              sort_order: i,
+            },
+            { onConflict: "user_id,name" },
+          )
           .select()
           .single();
 

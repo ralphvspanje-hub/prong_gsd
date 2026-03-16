@@ -208,15 +208,18 @@ const CrashCourseOnboarding = () => {
         const p = outputs.pillars[i];
         const { data: pillarData } = await supabase
           .from("pillars")
-          .insert({
-            user_id: user.id,
-            name: p.name,
-            description: p.description,
-            why_it_matters: `Crash course focus: ${p.focus_areas.join(", ")}`,
-            starting_level: p.starting_level,
-            current_level: p.starting_level,
-            sort_order: 100 + i,
-          })
+          .upsert(
+            {
+              user_id: user.id,
+              name: p.name,
+              description: p.description,
+              why_it_matters: `Crash course focus: ${p.focus_areas.join(", ")}`,
+              starting_level: p.starting_level,
+              current_level: p.starting_level,
+              sort_order: 100 + i,
+            },
+            { onConflict: "user_id,name" },
+          )
           .select()
           .single();
 
