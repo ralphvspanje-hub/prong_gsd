@@ -68,6 +68,7 @@ const CrashCourseDashboard = () => {
   const [checkinBlock, setCheckinBlock] = useState<PlanBlock | null>(null);
   const [showPlanComplete, setShowPlanComplete] = useState(false);
   const [blockPollCount, setBlockPollCount] = useState(0);
+  const [retrying, setRetrying] = useState(false);
 
   // ---- Queries ----
 
@@ -449,14 +450,43 @@ const CrashCourseDashboard = () => {
               </p>
               <Button
                 size="sm"
-                onClick={() => {
-                  setBlockPollCount(0);
-                  queryClient.invalidateQueries({
-                    queryKey: ["plan-blocks-current", plan?.id],
-                  });
+                disabled={retrying}
+                onClick={async () => {
+                  setRetrying(true);
+                  try {
+                    const { data: result, error } =
+                      await supabase.functions.invoke("gsd-generate-plan", {
+                        body: {
+                          mode: "interview_plan",
+                          crashcourse_type:
+                            plan?.crashcourse_type || "interview",
+                        },
+                      });
+                    if (error) throw error;
+                    if (result?.plan_id) {
+                      navigate(`/crash-course/${result.plan_id}`, {
+                        replace: true,
+                      });
+                    } else {
+                      setBlockPollCount(0);
+                      queryClient.invalidateQueries({
+                        queryKey: ["plan-blocks-current"],
+                      });
+                    }
+                  } catch (err: any) {
+                    toast.error("Retry failed: " + err.message);
+                  }
+                  setRetrying(false);
                 }}
               >
-                Retry
+                {retrying ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    Regenerating...
+                  </>
+                ) : (
+                  "Retry"
+                )}
               </Button>
             </>
           ) : (
