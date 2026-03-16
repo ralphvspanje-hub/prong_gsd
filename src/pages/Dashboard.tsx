@@ -12,7 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Zap, Loader2, ArrowRight, PartyPopper } from "lucide-react";
+import { Zap, Loader2, ArrowRight, PartyPopper, Info } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Tables } from "@/integrations/supabase/types";
@@ -537,10 +537,46 @@ const Dashboard = () => {
     <Layout>
       <div className="max-w-2xl mx-auto space-y-5 py-4">
         {/* Streak counter */}
-        <StreakCounter progress={progress || null} />
+        <StreakCounter
+          progress={progress || null}
+          sprintNumber={isSprint ? currentWeekNumber : undefined}
+        />
 
-        {/* Pacing banner */}
-        <PacingBanner pacingNotes={pacingNotes} />
+        {/* Pacing banner (weekly/crash course only) */}
+        {!isSprint && <PacingBanner pacingNotes={pacingNotes} />}
+
+        {/* Sprint explainer (sprint plans only, dismissible) */}
+        {isSprint &&
+          !localStorage.getItem("pronggsd-sprint-explainer-dismissed") && (
+            <div className="rounded-lg border border-accent/30 bg-accent/5 p-4 space-y-2">
+              <div className="flex items-start gap-2">
+                <Info className="h-4 w-4 text-accent mt-0.5 shrink-0" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">How sprints work</p>
+                  <p className="text-sm text-muted-foreground">
+                    Each sprint focuses on 1–2 skills with ~10 practice units.
+                    Work at your own pace — there's no calendar deadline. When
+                    you finish all units, you'll have a quick check-in
+                    conversation to review progress and pick your next focus.
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="ml-6"
+                onClick={(e) => {
+                  localStorage.setItem(
+                    "pronggsd-sprint-explainer-dismissed",
+                    "1",
+                  );
+                  (e.target as HTMLElement).closest(".rounded-lg")?.remove();
+                }}
+              >
+                Got it, show me the tasks
+              </Button>
+            </div>
+          )}
 
         {/* Extend plan prompt (exploratory plans nearing end) */}
         {showExtendPrompt && (
