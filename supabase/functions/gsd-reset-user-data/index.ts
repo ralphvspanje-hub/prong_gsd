@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
     });
 
     const { data: userData, error: userError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
+      authHeader.replace("Bearer ", ""),
     );
     if (userError || !userData?.user) {
       return jsonRes({ error: "Unauthorized" }, 401);
@@ -42,12 +42,21 @@ Deno.serve(async (req) => {
 
     const { mode } = await req.json();
     if (!["full", "rewind", "delete_account"].includes(mode)) {
-      return jsonRes({ error: "Invalid mode. Expected 'full', 'rewind', or 'delete_account'." }, 400);
+      return jsonRes(
+        {
+          error:
+            "Invalid mode. Expected 'full', 'rewind', or 'delete_account'.",
+        },
+        400,
+      );
     }
 
     if (mode === "rewind") {
       const ownerEmail = Deno.env.get("OWNER_EMAIL");
-      if (!ownerEmail || userEmail?.toLowerCase() !== ownerEmail.toLowerCase()) {
+      if (
+        !ownerEmail ||
+        userEmail?.toLowerCase() !== ownerEmail.toLowerCase()
+      ) {
         return jsonRes({ error: "Forbidden" }, 403);
       }
     }
@@ -81,25 +90,47 @@ Deno.serve(async (req) => {
     if (mode === "full" || mode === "delete_account") {
       await admin.from("phases").delete().eq("user_id", userId);
       await admin.from("pillars").delete().eq("user_id", userId);
-      await admin.from("onboarding_conversations").delete().eq("user_id", userId);
+      await admin
+        .from("onboarding_conversations")
+        .delete()
+        .eq("user_id", userId);
       await admin.from("user_profile").delete().eq("user_id", userId);
 
       if (mode === "delete_account") {
-        const { error: deleteAuthError } = await admin.auth.admin.deleteUser(userId);
+        const { error: deleteAuthError } =
+          await admin.auth.admin.deleteUser(userId);
         if (deleteAuthError) throw deleteAuthError;
       }
     } else {
-      const { data: pillarIds } = await admin
+      // Rewind: reset learning pillar topic_maps to queued
+      const { data: learningPillarIds } = await admin
         .from("pillars")
         .select("id")
-        .eq("user_id", userId);
-      const pIds = (pillarIds || []).map((p: { id: string }) => p.id);
-      if (pIds.length > 0) {
+        .eq("user_id", userId)
+        .lt("sort_order", 100);
+      const lpIds = (learningPillarIds || []).map((p: { id: string }) => p.id);
+      if (lpIds.length > 0) {
         await admin
           .from("topic_map")
           .update({ status: "queued" })
-          .in("pillar_id", pIds);
+          .in("pillar_id", lpIds);
       }
+
+      // Rewind: delete crash course pillars (sort_order >= 100) and their topic_maps
+      const { data: crashPillarIds } = await admin
+        .from("pillars")
+        .select("id")
+        .eq("user_id", userId)
+        .gte("sort_order", 100);
+      const cpIds = (crashPillarIds || []).map((p: { id: string }) => p.id);
+      if (cpIds.length > 0) {
+        await admin.from("topic_map").delete().in("pillar_id", cpIds);
+      }
+      await admin
+        .from("pillars")
+        .delete()
+        .eq("user_id", userId)
+        .gte("sort_order", 100);
     }
 
     return jsonRes({ success: true });

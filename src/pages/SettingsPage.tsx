@@ -86,14 +86,25 @@ const SettingsPage = () => {
     placeholderData: isDemo ? DEMO_PROFILE : undefined,
   });
 
+  // Determine which pillars to show based on dashboard view mode
+  const planType =
+    (localStorage.getItem("pronggsd-dashboard-view") as
+      | "learning"
+      | "interview_prep") || "learning";
+  const isCrashCourse = planType === "interview_prep";
+
   const { data: pillars = [], isLoading: pillarsLoading } = useQuery({
-    queryKey: ["pillars", user?.id],
+    queryKey: ["pillars", user?.id, isCrashCourse],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("pillars")
-        .select("*")
-        .eq("user_id", user!.id)
-        .order("sort_order");
+      let query = supabase.from("pillars").select("*").eq("user_id", user!.id);
+
+      if (isCrashCourse) {
+        query = query.gte("sort_order", 100);
+      } else {
+        query = query.lt("sort_order", 100);
+      }
+
+      const { data } = await query.order("sort_order");
       return data || [];
     },
     enabled: !isDemo && !!user,
@@ -469,10 +480,13 @@ const SettingsPage = () => {
         {/* Pillars */}
         <Card className="border-border">
           <CardHeader>
-            <CardTitle className="font-serif text-lg">Pillars</CardTitle>
+            <CardTitle className="font-serif text-lg">
+              {isCrashCourse ? "Crash Course Pillars" : "Pillars"}
+            </CardTitle>
             <CardDescription>
-              Your strategic knowledge domains. To add, swap, or edit pillars,
-              talk to your {mentorName}.
+              {isCrashCourse
+                ? "Pillars for your active crash course. To modify, talk to your mentor."
+                : `Your strategic knowledge domains. To add, swap, or edit pillars, talk to your ${mentorName}.`}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
