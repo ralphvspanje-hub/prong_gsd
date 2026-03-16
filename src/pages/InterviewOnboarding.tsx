@@ -151,12 +151,14 @@ const InterviewOnboarding = () => {
     setUploadingResume(true);
     try {
       const text = await parsePdf(file);
-      const { error } = await supabase
-        .from("user_profile")
-        .upsert(
-          { user_id: user!.id, resume_text: text },
-          { onConflict: "user_id" },
-        );
+      const { error } = await supabase.from("user_profile").upsert(
+        {
+          user_id: user!.id,
+          name: user!.email?.split("@")[0] || "Learner",
+          resume_text: text,
+        },
+        { onConflict: "user_id" },
+      );
       if (error) throw error;
       setResumeFileName(file.name);
       toast.success("Resume uploaded and parsed.");
@@ -186,7 +188,11 @@ const InterviewOnboarding = () => {
       const { error } = await supabase
         .from("user_profile")
         .upsert(
-          { user_id: user!.id, linkedin_context: text },
+          {
+            user_id: user!.id,
+            name: user!.email?.split("@")[0] || "Learner",
+            linkedin_context: text,
+          },
           { onConflict: "user_id" },
         );
       if (error) throw error;
@@ -202,15 +208,14 @@ const InterviewOnboarding = () => {
   const handleContextContinue = async () => {
     setSavingContext(true);
     if (contextJobDescription.trim()) {
-      await supabase
-        .from("user_profile")
-        .upsert(
-          {
-            user_id: user!.id,
-            interview_company_context: contextJobDescription.trim(),
-          },
-          { onConflict: "user_id" },
-        );
+      await supabase.from("user_profile").upsert(
+        {
+          user_id: user!.id,
+          name: user!.email?.split("@")[0] || "Learner",
+          interview_company_context: contextJobDescription.trim(),
+        },
+        { onConflict: "user_id" },
+      );
     }
     setPhase("chat");
     startConversation();
