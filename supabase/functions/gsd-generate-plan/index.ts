@@ -99,6 +99,10 @@ function buildDifficultyContext(params: BlockParams): string {
 }
 
 function parseTimeCommitment(profile: any): number {
+  // Prefer explicit hours_per_day if available (crash courses)
+  if (profile?.hours_per_day && profile.hours_per_day > 0) {
+    return Math.round(profile.hours_per_day * 60);
+  }
   if (
     profile?.time_commitment &&
     TIME_COMMITMENT_MINUTES[profile.time_commitment]
@@ -591,11 +595,16 @@ async function generateBlock(
     : profile?.pacing_profile || "steady";
   const dailyMinutes = isInterviewPlan
     ? profile.interview_intensity === "100_percent"
-      ? 180
+      ? profile?.hours_per_day
+        ? Math.round(profile.hours_per_day * 60)
+        : 180
       : parseTimeCommitment(profile)
     : parseTimeCommitment(profile);
   const activePillars = params.activePillarCount || 1;
   const minutesForThisPillar = Math.round(dailyMinutes / activePillars);
+  const daysPerWeek =
+    isInterviewPlan && profile?.days_per_week ? profile.days_per_week : 5;
+  const weeklyBudget = minutesForThisPillar * daysPerWeek;
   const [minTasks, maxTasks] = PACING_TASKS[pacingProfile] || [3, 4];
 
   // Build resource list for prompt
@@ -677,7 +686,15 @@ ${setupContext}${firstBlockInstruction}${extraContext}${buildDifficultyContext(p
 
 TASK RULES:
 - Generate ${minTasks}–${maxTasks} tasks.
-- Total estimated time should be ~${minutesForThisPillar * 5}–${minutesForThisPillar * 7} minutes for the week (${minutesForThisPillar} min/day).
+- Weekly time budget is approximately ${weeklyBudget} minutes (${minutesForThisPillar} min/day, ${daysPerWeek} days/week), but this is a GUIDELINE — quality matters more than fitting a budget.
+- Estimate each task INDIVIDUALLY based on what the resource actually requires:
+  * YouTube videos/lectures: estimate the ACTUAL video length. A deep-dive lecture is 60–120 min, a tutorial 15–30 min. Do NOT compress to fit the daily budget.
+  * Hands-on practice (drills, exercises, coding challenges): 20–60 min depending on complexity.
+  * Reading (articles, docs, guides): 15–30 min.
+  * Mock interviews: 20–40 min.
+  * Setup/installation tasks: 15–30 min.
+- A single task CAN exceed the daily per-pillar budget. If a resource genuinely takes 90 minutes, say 90 minutes. The learner will adjust their day.
+- It is BETTER to have fewer tasks with accurate estimates than many tasks with artificially low estimates.
 - Use curated resource URLs when they match. Set resource_type to "curated" and provide the url.
 - When no curated resource fits, set resource_type to "search_query", url to null, and provide a specific search_query.
 - For mock interview practice tasks, set resource_type to "mock_interview", platform to "ProngGSD", url to null, search_query to null. Action should describe the interview type with a "MOCK:" prefix (e.g., "MOCK: Behavioral interview — STAR method practice", "MOCK: SQL mock — window functions and CTEs"). These are handled in-app.
@@ -701,7 +718,7 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       "resource_type": "curated",
       "url": "https://...",
       "search_query": null,
-      "estimated_time_minutes": 30,
+      "estimated_time_minutes": 45,
       "why_text": "Why this task matters"
     },
     {
@@ -711,7 +728,7 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       "resource_type": "mock_interview",
       "url": null,
       "search_query": null,
-      "estimated_time_minutes": 20,
+      "estimated_time_minutes": 30,
       "why_text": "Practicing under pressure reveals gaps before the real interview."
     }
   ],
@@ -1050,7 +1067,11 @@ async function generateInterviewPlan(
     ? "adapted"
     : profile?.interview_intensity || "adapted";
   const dailyMinutes =
-    intensity === "100_percent" ? 180 : parseTimeCommitment(profile);
+    intensity === "100_percent"
+      ? profile?.hours_per_day
+        ? Math.round(profile.hours_per_day * 60)
+        : 180
+      : parseTimeCommitment(profile);
 
   const pillarSummaries = pillars
     .map((p: any) => {

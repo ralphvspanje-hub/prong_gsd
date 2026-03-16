@@ -237,6 +237,8 @@ const CrashCourseOnboarding = () => {
         {
           user_id: user.id,
           name: user.email?.split("@")[0] || "Learner",
+          hours_per_day: outputs.hours_per_day || null,
+          days_per_week: outputs.days_per_week || null,
           time_commitment: outputs.time_commitment || "60_min_daily",
         },
         { onConflict: "user_id" },
