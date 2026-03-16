@@ -5,7 +5,6 @@ import { Layout } from "@/components/Layout";
 import { StreakCounter } from "@/components/plan/StreakCounter";
 import { PacingBanner } from "@/components/plan/PacingBanner";
 import { WeeklyGoalCard } from "@/components/plan/WeeklyGoalCard";
-import { PrimerView } from "@/components/plan/PrimerView";
 import { DailyTaskList } from "@/components/plan/DailyTaskList";
 import { CheckinModal } from "@/components/plan/CheckinModal";
 import { PlanCompletionModal } from "@/components/plan/PlanCompletionModal";
@@ -58,8 +57,11 @@ const Dashboard = () => {
   const userId = user?.id;
 
   // View mode toggle (persisted in localStorage)
-  const [viewMode, setViewMode] = useState<"learning" | "interview_prep">(() =>
-    (localStorage.getItem("pronggsd-dashboard-view") as "learning" | "interview_prep") || "learning"
+  const [viewMode, setViewMode] = useState<"learning" | "interview_prep">(
+    () =>
+      (localStorage.getItem("pronggsd-dashboard-view") as
+        | "learning"
+        | "interview_prep") || "learning",
   );
 
   const handleViewToggle = (mode: "learning" | "interview_prep") => {
@@ -128,7 +130,8 @@ const Dashboard = () => {
 
   // Derived: which plan is active for this view
   const plan = viewMode === "interview_prep" ? interviewPlan : learningPlan;
-  const planLoading = viewMode === "interview_prep" ? interviewPlanLoading : learningPlanLoading;
+  const planLoading =
+    viewMode === "interview_prep" ? interviewPlanLoading : learningPlanLoading;
   const hasBothPlans = !!learningPlan && !!interviewPlan;
 
   // Pillars (for name lookup)
@@ -235,11 +238,15 @@ const Dashboard = () => {
   const outline = plan?.plan_outline as unknown as PlanOutline | null;
   const currentWeekNumber = currentBlocks?.[0]?.week_number;
 
-  // Pacing notes from current blocks
-  const pacingNotes = useMemo(
-    () => (currentBlocks || []).map((b) => b.pacing_note).filter(Boolean) as string[],
-    [currentBlocks],
-  );
+  // Pacing notes from current blocks (limit to 1 for interview prep to avoid repetition)
+  const pacingNotes = useMemo(() => {
+    const notes = (currentBlocks || [])
+      .map((b) => b.pacing_note)
+      .filter(Boolean) as string[];
+    return viewMode === "interview_prep"
+      ? notes.slice(0, 1)
+      : [...new Set(notes)];
+  }, [currentBlocks, viewMode]);
 
   // Weekly goal cards
   const pillarGoals = useMemo(() => {
@@ -248,173 +255,200 @@ const Dashboard = () => {
     return currentBlocks
       .filter((b) => !b.is_completed)
       .map((b) => ({
-        pillarName: pillars.find((p) => p.id === b.pillar_id)?.name || "Unknown",
+        pillarName:
+          pillars.find((p) => p.id === b.pillar_id)?.name || "Unknown",
         weeklyGoal: b.weekly_goal,
       }));
   }, [currentBlocks, pillars]);
 
-  // Primers to show (first uncompleted block per pillar with context_brief)
-  const primerBlocks = useMemo(() => {
-    if (!currentBlocks) return [];
-    return currentBlocks.filter((b) => !b.is_completed && b.context_brief);
-  }, [currentBlocks]);
-
   // Check if the entire plan is complete (all blocks done, blocks exist)
-  const isPlanComplete = currentBlocks !== null && currentBlocks !== undefined
-    && currentBlocks.length === 0 && plan;
+  const isPlanComplete =
+    currentBlocks !== null &&
+    currentBlocks !== undefined &&
+    currentBlocks.length === 0 &&
+    plan;
 
   // ---- Task completion ----
 
-  const handleToggleTask = useCallback(async (taskId: string, completed: boolean) => {
-    if (!userId) return;
+  const handleToggleTask = useCallback(
+    async (taskId: string, completed: boolean) => {
+      if (!userId) return;
 
-    // Optimistic update
-    queryClient.setQueryData<PlanTask[]>(
-      ["plan-tasks", blockIds],
-      (old) => old?.map((t) =>
-        t.id === taskId
-          ? { ...t, is_completed: completed, completed_at: completed ? new Date().toISOString() : null }
-          : t
-      ),
-    );
-
-    // Update task in DB
-    const { error: taskError } = await supabase
-      .from("plan_tasks")
-      .update({
-        is_completed: completed,
-        completed_at: completed ? new Date().toISOString() : null,
-      })
-      .eq("id", taskId);
-
-    if (taskError) {
-      toast.error("Failed to update task");
-      queryClient.invalidateQueries({ queryKey: ["plan-tasks", blockIds] });
-      return;
-    }
-
-    if (completed) {
-      // Fire-and-forget: edge function handles streak + pacing authoritatively
-      supabase.functions.invoke("gsd-process-checkin", {
-        body: { event_type: "task_complete", task_id: taskId },
-      }).then(({ data }) => {
-        if (data) {
-          queryClient.invalidateQueries({ queryKey: ["user-progress", userId] });
-          // Edge function detected block completion → show CheckinModal
-          if (data.block_auto_complete && data.block_id) {
-            const block = currentBlocks?.find((b) => b.id === data.block_id);
-            if (block) setCheckinBlock(block);
-          }
-          if (data.gap_return) {
-            toast("Welcome back! Your streak starts fresh today.");
-          }
-          // Refresh pacing notes if updated
-          if (data.pacing_note !== undefined) {
-            queryClient.invalidateQueries({ queryKey: ["plan-blocks-current", plan?.id] });
-          }
-        }
-      }).catch(() => {
-        queryClient.invalidateQueries({ queryKey: ["user-progress", userId] });
-      });
-    } else {
-      // Un-completion: decrement total_tasks_completed directly
-      await supabase
-        .from("user_progress")
-        .update({
-          total_tasks_completed: Math.max(0, (progress?.total_tasks_completed ?? 1) - 1),
-        })
-        .eq("user_id", userId);
-      queryClient.invalidateQueries({ queryKey: ["user-progress", userId] });
-
-      // Revert block completion if parent block was marked complete
-      const parentBlock = currentBlocks?.find((b) =>
-        tasks?.some((t) => t.id === taskId && t.plan_block_id === b.id),
+      // Optimistic update
+      queryClient.setQueryData<PlanTask[]>(["plan-tasks", blockIds], (old) =>
+        old?.map((t) =>
+          t.id === taskId
+            ? {
+                ...t,
+                is_completed: completed,
+                completed_at: completed ? new Date().toISOString() : null,
+              }
+            : t,
+        ),
       );
-      if (parentBlock?.is_completed) {
-        await supabase
-          .from("plan_blocks")
-          .update({ is_completed: false, completed_at: null })
-          .eq("id", parentBlock.id);
-        queryClient.invalidateQueries({ queryKey: ["plan-blocks-current", plan?.id] });
+
+      // Update task in DB
+      const { error: taskError } = await supabase
+        .from("plan_tasks")
+        .update({
+          is_completed: completed,
+          completed_at: completed ? new Date().toISOString() : null,
+        })
+        .eq("id", taskId);
+
+      if (taskError) {
+        toast.error("Failed to update task");
+        queryClient.invalidateQueries({ queryKey: ["plan-tasks", blockIds] });
+        return;
       }
-    }
-  }, [userId, progress, blockIds, tasks, currentBlocks, plan, queryClient]);
+
+      if (completed) {
+        // Fire-and-forget: edge function handles streak + pacing authoritatively
+        supabase.functions
+          .invoke("gsd-process-checkin", {
+            body: { event_type: "task_complete", task_id: taskId },
+          })
+          .then(({ data }) => {
+            if (data) {
+              queryClient.invalidateQueries({
+                queryKey: ["user-progress", userId],
+              });
+              // Edge function detected block completion → show CheckinModal
+              if (data.block_auto_complete && data.block_id) {
+                const block = currentBlocks?.find(
+                  (b) => b.id === data.block_id,
+                );
+                if (block) setCheckinBlock(block);
+              }
+              if (data.gap_return) {
+                toast("Welcome back! Your streak starts fresh today.");
+              }
+              // Refresh pacing notes if updated
+              if (data.pacing_note !== undefined) {
+                queryClient.invalidateQueries({
+                  queryKey: ["plan-blocks-current", plan?.id],
+                });
+              }
+            }
+          })
+          .catch(() => {
+            queryClient.invalidateQueries({
+              queryKey: ["user-progress", userId],
+            });
+          });
+      } else {
+        // Un-completion: decrement total_tasks_completed directly
+        await supabase
+          .from("user_progress")
+          .update({
+            total_tasks_completed: Math.max(
+              0,
+              (progress?.total_tasks_completed ?? 1) - 1,
+            ),
+          })
+          .eq("user_id", userId);
+        queryClient.invalidateQueries({ queryKey: ["user-progress", userId] });
+
+        // Revert block completion if parent block was marked complete
+        const parentBlock = currentBlocks?.find((b) =>
+          tasks?.some((t) => t.id === taskId && t.plan_block_id === b.id),
+        );
+        if (parentBlock?.is_completed) {
+          await supabase
+            .from("plan_blocks")
+            .update({ is_completed: false, completed_at: null })
+            .eq("id", parentBlock.id);
+          queryClient.invalidateQueries({
+            queryKey: ["plan-blocks-current", plan?.id],
+          });
+        }
+      }
+    },
+    [userId, progress, blockIds, tasks, currentBlocks, plan, queryClient],
+  );
 
   // ---- Check-in submission ----
 
-  const handleCheckinSubmit = useCallback(async (difficulty: string, note: string) => {
-    if (!checkinBlock || !plan || !outline) return;
+  const handleCheckinSubmit = useCallback(
+    async (difficulty: string, note: string) => {
+      if (!checkinBlock || !plan || !outline) return;
 
-    // Call process-checkin edge function — handles block completion, leveling, and plan progression
-    const { data: checkinResult, error: checkinError } = await supabase.functions.invoke(
-      "gsd-process-checkin",
-      {
-        body: {
-          event_type: "block_complete",
-          block_id: checkinBlock.id,
-          difficulty: difficulty || null,
-          note: note || null,
-        },
-      },
-    );
-
-    if (checkinError) {
-      toast.error("Check-in failed. Please try again.");
-      setCheckinBlock(null);
-      return;
-    }
-
-    // Level-up toast
-    if (checkinResult?.level_up) {
-      toast.success(
-        `Level up! ${checkinResult.level_up.pillar_name} → Level ${checkinResult.level_up.new_level}`,
-      );
-    }
-
-    // Plan progression
-    if (checkinResult?.plan_status === "plan_complete") {
-      setCheckinBlock(null);
-      setShowPlanComplete(true);
-      queryClient.invalidateQueries({ queryKey: ["plan-blocks-current", plan.id] });
-      return;
-    }
-
-    if (checkinResult?.next_block?.should_generate) {
-      const nextWeek = checkinResult.next_block;
-      for (const wp of nextWeek.pillars || []) {
-        const pillarId = wp.pillar_id
-          || (pillars || []).find((p: { id: string; name: string }) =>
-            p.name.toLowerCase().includes(wp.pillar_name.toLowerCase()) ||
-            wp.pillar_name.toLowerCase().includes(p.name.toLowerCase()),
-          )?.id;
-
-        if (!pillarId) continue;
-
-        await supabase.functions.invoke("gsd-generate-plan", {
+      // Call process-checkin edge function — handles block completion, leveling, and plan progression
+      const { data: checkinResult, error: checkinError } =
+        await supabase.functions.invoke("gsd-process-checkin", {
           body: {
-            mode: "plan_block",
-            plan_id: plan.id,
-            week_number: nextWeek.week_number,
-            pillar_id: pillarId,
-            weekly_goal: wp.weekly_goal,
-            active_pillar_count: nextWeek.pillars.length,
-            difficulty_adjustment: checkinResult.difficulty_adjustment,
-            feedback_context: checkinResult.feedback_context,
+            event_type: "block_complete",
+            block_id: checkinBlock.id,
+            difficulty: difficulty || null,
+            note: note || null,
           },
         });
+
+      if (checkinError) {
+        toast.error("Check-in failed. Please try again.");
+        setCheckinBlock(null);
+        return;
       }
-    }
 
-    // Near-end prompt for exploratory plans
-    if (checkinResult?.nearing_end) {
-      setShowExtendPrompt(true);
-    }
+      // Level-up toast
+      if (checkinResult?.level_up) {
+        toast.success(
+          `Level up! ${checkinResult.level_up.pillar_name} → Level ${checkinResult.level_up.new_level}`,
+        );
+      }
 
-    setCheckinBlock(null);
-    queryClient.invalidateQueries({ queryKey: ["plan-blocks-current", plan.id] });
-    queryClient.invalidateQueries({ queryKey: ["plan-tasks"] });
-    queryClient.invalidateQueries({ queryKey: ["user-progress", userId] });
-  }, [checkinBlock, plan, outline, pillars, userId, queryClient]);
+      // Plan progression
+      if (checkinResult?.plan_status === "plan_complete") {
+        setCheckinBlock(null);
+        setShowPlanComplete(true);
+        queryClient.invalidateQueries({
+          queryKey: ["plan-blocks-current", plan.id],
+        });
+        return;
+      }
+
+      if (checkinResult?.next_block?.should_generate) {
+        const nextWeek = checkinResult.next_block;
+        for (const wp of nextWeek.pillars || []) {
+          const pillarId =
+            wp.pillar_id ||
+            (pillars || []).find(
+              (p: { id: string; name: string }) =>
+                p.name.toLowerCase().includes(wp.pillar_name.toLowerCase()) ||
+                wp.pillar_name.toLowerCase().includes(p.name.toLowerCase()),
+            )?.id;
+
+          if (!pillarId) continue;
+
+          await supabase.functions.invoke("gsd-generate-plan", {
+            body: {
+              mode: "plan_block",
+              plan_id: plan.id,
+              week_number: nextWeek.week_number,
+              pillar_id: pillarId,
+              weekly_goal: wp.weekly_goal,
+              active_pillar_count: nextWeek.pillars.length,
+              difficulty_adjustment: checkinResult.difficulty_adjustment,
+              feedback_context: checkinResult.feedback_context,
+            },
+          });
+        }
+      }
+
+      // Near-end prompt for exploratory plans
+      if (checkinResult?.nearing_end) {
+        setShowExtendPrompt(true);
+      }
+
+      setCheckinBlock(null);
+      queryClient.invalidateQueries({
+        queryKey: ["plan-blocks-current", plan.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["plan-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["user-progress", userId] });
+    },
+    [checkinBlock, plan, outline, pillars, userId, queryClient],
+  );
 
   // ---- Extend plan handler ----
 
@@ -427,7 +461,9 @@ const Dashboard = () => {
       });
       toast.success("Plan extended! New weeks have been added.");
       queryClient.invalidateQueries({ queryKey: ["learning-plan", userId] });
-      queryClient.invalidateQueries({ queryKey: ["plan-blocks-current", plan.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["plan-blocks-current", plan.id],
+      });
     } catch {
       toast.error("Failed to extend plan.");
     } finally {
@@ -439,7 +475,13 @@ const Dashboard = () => {
   // ---- Render ----
 
   // No-plan redirect — only if neither plan type exists
-  if (!learningPlanLoading && !interviewPlanLoading && !learningPlan && !interviewPlan && userId) {
+  if (
+    !learningPlanLoading &&
+    !interviewPlanLoading &&
+    !learningPlan &&
+    !interviewPlan &&
+    userId
+  ) {
     return <Navigate to="/context-upload" replace />;
   }
 
@@ -476,13 +518,16 @@ const Dashboard = () => {
             <>
               <Zap className="h-8 w-8 text-destructive" />
               <p className="text-sm text-muted-foreground max-w-xs">
-                Plan generation seems to be taking too long. This can happen if the AI service is busy.
+                Plan generation seems to be taking too long. This can happen if
+                the AI service is busy.
               </p>
               <Button
                 size="sm"
                 onClick={() => {
                   setBlockPollCount(0);
-                  queryClient.invalidateQueries({ queryKey: ["plan-blocks-current", plan?.id] });
+                  queryClient.invalidateQueries({
+                    queryKey: ["plan-blocks-current", plan?.id],
+                  });
                 }}
               >
                 Retry
@@ -509,11 +554,14 @@ const Dashboard = () => {
           <Zap className="h-10 w-10 text-accent" />
           <h1 className="font-serif text-2xl font-bold">Plan complete!</h1>
           <p className="text-sm text-muted-foreground max-w-md">
-            You've finished your {outline.total_weeks}-week plan. Talk to your mentor about what's next, or start fresh.
+            You've finished your {outline.total_weeks}-week plan. Talk to your
+            mentor about what's next, or start fresh.
           </p>
           <div className="flex gap-2 mt-2">
             <Button onClick={() => navigate("/mentor")}>What's next?</Button>
-            <Button variant="outline" onClick={() => navigate("/onboarding")}>Start fresh</Button>
+            <Button variant="outline" onClick={() => navigate("/onboarding")}>
+              Start fresh
+            </Button>
           </div>
         </div>
         <PlanCompletionModal
@@ -553,7 +601,10 @@ const Dashboard = () => {
             <div className="flex items-center gap-3 rounded-lg border border-dashed border-orange-500/30 bg-orange-500/5 px-4 py-3 hover:bg-orange-500/10 transition-colors cursor-pointer">
               <Target className="h-4 w-4 text-orange-500 shrink-0" />
               <p className="text-sm text-muted-foreground">
-                Interview coming up? <span className="text-orange-500 font-medium">Start a crash course</span>
+                Interview coming up?{" "}
+                <span className="text-orange-500 font-medium">
+                  Start a crash course
+                </span>
               </p>
             </div>
           </Link>
@@ -570,7 +621,8 @@ const Dashboard = () => {
           <div className="rounded-lg border bg-card p-4 space-y-2">
             <p className="text-sm font-medium">Your plan is almost done!</p>
             <p className="text-sm text-muted-foreground">
-              Would you like to extend it with more weeks, or talk to your mentor about what's next?
+              Would you like to extend it with more weeks, or talk to your
+              mentor about what's next?
             </p>
             <div className="flex gap-2">
               <Button
@@ -578,12 +630,22 @@ const Dashboard = () => {
                 onClick={handleExtendPlan}
                 disabled={isExtending}
               >
-                {isExtending ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Extending...</> : "Extend plan"}
+                {isExtending ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />{" "}
+                    Extending...
+                  </>
+                ) : (
+                  "Extend plan"
+                )}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => { setShowExtendPrompt(false); navigate("/mentor"); }}
+                onClick={() => {
+                  setShowExtendPrompt(false);
+                  navigate("/mentor");
+                }}
               >
                 Talk to mentor
               </Button>
@@ -600,19 +662,13 @@ const Dashboard = () => {
 
         {/* Weekly goal card */}
         {currentWeekNumber && pillarGoals.length > 0 && (
-          <WeeklyGoalCard weekNumber={currentWeekNumber} pillarGoals={pillarGoals} />
+          <WeeklyGoalCard
+            weekNumber={currentWeekNumber}
+            pillarGoals={pillarGoals}
+          />
         )}
 
-        {/* Primers for new pillars / level 1 */}
-        {primerBlocks.map((block) => (
-          <PrimerView
-            key={block.id}
-            blockId={block.id}
-            contextBrief={block.context_brief || ""}
-          />
-        ))}
-
-        {/* Daily task list */}
+        {/* Daily task list (primers now rendered inline per pillar) */}
         <DailyTaskList
           blocks={currentBlocks || []}
           tasks={tasks || []}
@@ -628,7 +684,11 @@ const Dashboard = () => {
         {/* View full plan link */}
         <div className="pt-2">
           <Link to="/plan">
-            <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1 text-muted-foreground"
+            >
               View full plan <ArrowRight className="h-3.5 w-3.5" />
             </Button>
           </Link>
@@ -639,7 +699,9 @@ const Dashboard = () => {
       {checkinBlock && (
         <CheckinModal
           open={!!checkinBlock}
-          onOpenChange={(open) => { if (!open) setCheckinBlock(null); }}
+          onOpenChange={(open) => {
+            if (!open) setCheckinBlock(null);
+          }}
           weekNumber={checkinBlock.week_number}
           pillarName={pillarNameForBlock(checkinBlock)}
           onSubmit={handleCheckinSubmit}

@@ -1,4 +1,5 @@
 import { TaskItem } from "./TaskItem";
+import { PrimerView } from "./PrimerView";
 import { Tables } from "@/integrations/supabase/types";
 
 type PlanTask = Tables<"plan_tasks">;
@@ -17,14 +18,28 @@ interface DailyTaskListProps {
 }
 
 /** Primary task list grouped by pillar. Incomplete tasks first, completed at bottom. */
-export const DailyTaskList = ({ blocks, tasks, pillars, onToggleTask }: DailyTaskListProps) => {
+export const DailyTaskList = ({
+  blocks,
+  tasks,
+  pillars,
+  onToggleTask,
+}: DailyTaskListProps) => {
   // Build a pillar name lookup
   const pillarNames = new Map(pillars.map((p) => [p.id, p.name]));
 
   // Group tasks by pillar via their parent plan_block
   const blockPillarMap = new Map(blocks.map((b) => [b.id, b.pillar_id]));
 
-  const pillarGroups = new Map<string, { name: string; blockTitle: string; tasks: PlanTask[] }>();
+  const pillarGroups = new Map<
+    string,
+    {
+      name: string;
+      blockTitle: string;
+      blockId: string | null;
+      contextBrief: string | null;
+      tasks: PlanTask[];
+    }
+  >();
 
   for (const task of tasks) {
     const pillarId = blockPillarMap.get(task.plan_block_id) || "unknown";
@@ -33,6 +48,11 @@ export const DailyTaskList = ({ blocks, tasks, pillars, onToggleTask }: DailyTas
       pillarGroups.set(pillarId, {
         name: pillarNames.get(pillarId) || "Tasks",
         blockTitle: block?.title || "",
+        blockId: block?.id || null,
+        contextBrief:
+          !block?.is_completed && block?.context_brief
+            ? block.context_brief
+            : null,
         tasks: [],
       });
     }
@@ -66,8 +86,18 @@ export const DailyTaskList = ({ blocks, tasks, pillars, onToggleTask }: DailyTas
             <div className="mb-2">
               <h3 className="text-sm font-medium">{group.name}</h3>
               {group.blockTitle && (
-                <p className="text-xs text-muted-foreground">{group.blockTitle}</p>
+                <p className="text-xs text-muted-foreground">
+                  {group.blockTitle}
+                </p>
               )}
+            </div>
+          )}
+          {group.blockId && group.contextBrief && (
+            <div className="mb-3">
+              <PrimerView
+                blockId={group.blockId}
+                contextBrief={group.contextBrief}
+              />
             </div>
           )}
           <div className="divide-y divide-border">

@@ -55,15 +55,22 @@ const PlanOverview = () => {
   const { user } = useAuth();
   const userId = user?.id;
 
-  // Active plan
+  // Determine which plan type to show based on dashboard view mode
+  const planType =
+    (localStorage.getItem("pronggsd-dashboard-view") as
+      | "learning"
+      | "interview_prep") || "learning";
+
+  // Active plan (scoped by plan_type)
   const { data: plan, isLoading: planLoading } = useQuery({
-    queryKey: ["learning-plan", userId],
+    queryKey: ["learning-plan", userId, planType],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("learning_plans")
         .select("*")
         .eq("user_id", userId!)
         .eq("is_active", true)
+        .eq("plan_type", planType)
         .maybeSingle();
       if (error) throw error;
       return data as LearningPlan | null;
@@ -87,12 +94,14 @@ const PlanOverview = () => {
 
   // Build week status map: completed / current / future
   const weekStatuses = useMemo(() => {
-    if (!allBlocks) return new Map<number, "completed" | "current" | "future">();
+    if (!allBlocks)
+      return new Map<number, "completed" | "current" | "future">();
     const statusMap = new Map<number, "completed" | "current" | "future">();
     const weekBlocks = new Map<number, boolean[]>();
 
     for (const block of allBlocks) {
-      if (!weekBlocks.has(block.week_number)) weekBlocks.set(block.week_number, []);
+      if (!weekBlocks.has(block.week_number))
+        weekBlocks.set(block.week_number, []);
       weekBlocks.get(block.week_number)!.push(block.is_completed);
     }
 
@@ -144,15 +153,23 @@ const PlanOverview = () => {
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <Link to="/dashboard">
-              <Button variant="ghost" size="sm" className="gap-1 -ml-2 mb-1 text-muted-foreground">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1 -ml-2 mb-1 text-muted-foreground"
+              >
                 <ArrowLeft className="h-3.5 w-3.5" /> Back to Today
               </Button>
             </Link>
             <h1 className="font-serif text-2xl font-bold">
-              Your {outline.total_weeks}-Week Plan
+              {planType === "interview_prep" ? "Interview Prep" : "Your"}{" "}
+              {outline.total_weeks}-Week Plan
             </h1>
           </div>
-          <Badge variant="outline" className={PACING_COLORS[plan.pacing_profile] || ""}>
+          <Badge
+            variant="outline"
+            className={PACING_COLORS[plan.pacing_profile] || ""}
+          >
             {PACING_LABELS[plan.pacing_profile] || plan.pacing_profile}
           </Badge>
         </div>
@@ -175,16 +192,24 @@ const PlanOverview = () => {
                   <CardContent className="py-4 space-y-2">
                     {/* Week header */}
                     <div className="flex items-center gap-2">
-                      {isCompleted && <Check className="h-4 w-4 text-green-500" />}
-                      {isCurrent && <Play className="h-4 w-4 text-accent fill-accent" />}
-                      {status === "future" && <Circle className="h-4 w-4 text-muted-foreground" />}
+                      {isCompleted && (
+                        <Check className="h-4 w-4 text-green-500" />
+                      )}
+                      {isCurrent && (
+                        <Play className="h-4 w-4 text-accent fill-accent" />
+                      )}
+                      {status === "future" && (
+                        <Circle className="h-4 w-4 text-muted-foreground" />
+                      )}
 
                       <span className="text-sm font-serif font-medium">
                         Week {week.week_number}
                       </span>
 
                       {isCurrent && (
-                        <Badge variant="secondary" className="text-[10px]">Current</Badge>
+                        <Badge variant="secondary" className="text-[10px]">
+                          Current
+                        </Badge>
                       )}
                     </div>
 
@@ -194,7 +219,10 @@ const PlanOverview = () => {
                         <div className="mt-1.5 h-1.5 w-1.5 rounded-full bg-accent/60 shrink-0" />
                         <p className="text-sm">
                           <span className="font-medium">{wp.pillar_name}</span>
-                          <span className="text-muted-foreground"> — {wp.weekly_goal}</span>
+                          <span className="text-muted-foreground">
+                            {" "}
+                            — {wp.weekly_goal}
+                          </span>
                         </p>
                       </div>
                     ))}

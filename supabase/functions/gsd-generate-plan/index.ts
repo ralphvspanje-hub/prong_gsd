@@ -13,11 +13,18 @@ const TIME_COMMITMENT_MINUTES: Record<string, number> = {
   "30_min_daily": 30,
   "60_min_daily": 60,
   "90_min_daily": 90,
-  "weekend_only": 120,
+  weekend_only: 120,
 };
 
 const TOKEN_BUDGET: Record<number, number> = {
-  5: 800, 10: 1200, 15: 1800, 30: 3000, 45: 4000, 60: 5000, 90: 5000, 120: 5000,
+  5: 800,
+  10: 1200,
+  15: 1800,
+  30: 3000,
+  45: 4000,
+  60: 5000,
+  90: 5000,
+  120: 5000,
 };
 
 const PACING_WEEKS: Record<string, [number, number]> = {
@@ -35,10 +42,14 @@ const PACING_TASKS: Record<string, [number, number]> = {
 };
 
 const PACING_TONE: Record<string, string> = {
-  aggressive: 'Direct and urgent. "You need this for interviews." Push for action.',
-  steady: 'Encouraging and milestone-focused. "Great progress — here\'s your next step."',
-  exploratory: 'Relaxed and curiosity-driven. "Explore this when you feel like it."',
-  intensive: 'High-pressure sprint. "Interview is coming. Every hour counts. Do this NOW." No fluff.',
+  aggressive:
+    'Direct and urgent. "You need this for interviews." Push for action.',
+  steady:
+    'Encouraging and milestone-focused. "Great progress — here\'s your next step."',
+  exploratory:
+    'Relaxed and curiosity-driven. "Explore this when you feel like it."',
+  intensive:
+    'High-pressure sprint. "Interview is coming. Every hour counts. Do this NOW." No fluff.',
 };
 
 // Maps pillar name keywords → curated_resources skill_area values
@@ -75,9 +86,11 @@ const LEVEL_TIERS: Record<string, [number, number]> = {
 function buildDifficultyContext(params: BlockParams): string {
   let ctx = "";
   if (params.difficultyAdjustment === "harder") {
-    ctx += "\n\nDIFFICULTY ADJUSTMENT: The learner found the previous block too easy. Increase complexity, use more challenging exercises and intermediate/advanced resources.";
+    ctx +=
+      "\n\nDIFFICULTY ADJUSTMENT: The learner found the previous block too easy. Increase complexity, use more challenging exercises and intermediate/advanced resources.";
   } else if (params.difficultyAdjustment === "easier") {
-    ctx += "\n\nDIFFICULTY ADJUSTMENT: The learner found the previous block too hard. Simplify tasks, add more scaffolding, include beginner-friendly resources and more explanation.";
+    ctx +=
+      "\n\nDIFFICULTY ADJUSTMENT: The learner found the previous block too hard. Simplify tasks, add more scaffolding, include beginner-friendly resources and more explanation.";
   }
   if (params.feedbackContext) {
     ctx += `\n\nLEARNER FEEDBACK FROM LAST BLOCK: ${params.feedbackContext}`;
@@ -86,14 +99,19 @@ function buildDifficultyContext(params: BlockParams): string {
 }
 
 function parseTimeCommitment(profile: any): number {
-  if (profile?.time_commitment && TIME_COMMITMENT_MINUTES[profile.time_commitment]) {
+  if (
+    profile?.time_commitment &&
+    TIME_COMMITMENT_MINUTES[profile.time_commitment]
+  ) {
     return TIME_COMMITMENT_MINUTES[profile.time_commitment];
   }
   return profile?.daily_time_commitment || 20;
 }
 
 function getMaxTokens(dailyTime: number): number {
-  const keys = Object.keys(TOKEN_BUDGET).map(Number).sort((a, b) => a - b);
+  const keys = Object.keys(TOKEN_BUDGET)
+    .map(Number)
+    .sort((a, b) => a - b);
   for (const k of keys) {
     if (dailyTime <= k) return TOKEN_BUDGET[k];
   }
@@ -156,7 +174,9 @@ async function callGemini(
   if (!aiResponse.ok) {
     if (aiResponse.status === 429) {
       throw Object.assign(
-        new Error("The AI service is temporarily unavailable due to high demand. Please try again in a few minutes."),
+        new Error(
+          "The AI service is temporarily unavailable due to high demand. Please try again in a few minutes.",
+        ),
         { status: 429 },
       );
     }
@@ -250,9 +270,22 @@ async function generateOutline(
 
   // Fetch all context
   const [profileRes, pillarsRes, phasesRes] = await Promise.all([
-    supabase.from("user_profile").select("*").eq("user_id", userId).maybeSingle(),
-    supabase.from("pillars").select("*").eq("user_id", userId).eq("is_active", true).order("sort_order"),
-    supabase.from("phases").select("*").eq("user_id", userId).order("sort_order"),
+    supabase
+      .from("user_profile")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("pillars")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .order("sort_order"),
+    supabase
+      .from("phases")
+      .select("*")
+      .eq("user_id", userId)
+      .order("sort_order"),
   ]);
 
   const profile = profileRes.data;
@@ -260,7 +293,10 @@ async function generateOutline(
   const phases = phasesRes.data || [];
 
   if (pillars.length === 0) {
-    throw Object.assign(new Error("No pillars found. Complete onboarding first."), { status: 400 });
+    throw Object.assign(
+      new Error("No pillars found. Complete onboarding first."),
+      { status: 400 },
+    );
   }
 
   // Fetch topic maps for all pillars
@@ -276,15 +312,25 @@ async function generateOutline(
   const [minWeeks, maxWeeks] = PACING_WEEKS[pacingProfile] || [8, 12];
 
   // Build pillar summaries for AI
-  const pillarSummaries = pillars.map((p: any) => {
-    const clusters = (topicMaps || []).filter((t: any) => t.pillar_id === p.id);
-    return `- ${p.name} (level ${p.current_level}/5): ${p.description || ""}
+  const pillarSummaries = pillars
+    .map((p: any) => {
+      const clusters = (topicMaps || []).filter(
+        (t: any) => t.pillar_id === p.id,
+      );
+      return `- ${p.name} (level ${p.current_level}/5): ${p.description || ""}
     Topics: ${clusters.map((c: any) => `${c.cluster_name} [${c.subtopics?.join(", ") || ""}]`).join("; ")}`;
-  }).join("\n");
+    })
+    .join("\n");
 
-  const phaseSummary = phases.length > 0
-    ? phases.map((ph: any) => `- ${ph.name}: ${ph.goal || ""} (${ph.timeline_start} to ${ph.timeline_end})`).join("\n")
-    : "No phases defined.";
+  const phaseSummary =
+    phases.length > 0
+      ? phases
+          .map(
+            (ph: any) =>
+              `- ${ph.name}: ${ph.goal || ""} (${ph.timeline_start} to ${ph.timeline_end})`,
+          )
+          .join("\n")
+      : "No phases defined.";
 
   // Build optional context
   let extraContext = "";
@@ -349,7 +395,8 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
     // Retry once with stricter instruction
     rawText = await callGemini(
       geminiApiKey,
-      systemPrompt + "\n\nCRITICAL: Respond with raw JSON only. No markdown, no commentary, no code fences.",
+      systemPrompt +
+        "\n\nCRITICAL: Respond with raw JSON only. No markdown, no commentary, no code fences.",
       userPrompt,
       4000,
     );
@@ -368,7 +415,9 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       if (matched) {
         wp.pillar_id = matched.id;
       } else {
-        warnings.push(`Week ${week.week_number}: pillar "${wp.pillar_name}" not found in DB, skipping.`);
+        warnings.push(
+          `Week ${week.week_number}: pillar "${wp.pillar_name}" not found in DB, skipping.`,
+        );
       }
     }
     // Remove unmatched pillars
@@ -376,9 +425,13 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
   }
 
   // Remove empty weeks
-  outline.weeks = outline.weeks.filter((w: any) => w.pillars && w.pillars.length > 0);
+  outline.weeks = outline.weeks.filter(
+    (w: any) => w.pillars && w.pillars.length > 0,
+  );
   if (outline.weeks.length === 0) {
-    throw new Error("AI plan outline matched zero pillars to the user's actual pillars.");
+    throw new Error(
+      "AI plan outline matched zero pillars to the user's actual pillars.",
+    );
   }
   outline.total_weeks = outline.weeks.length;
 
@@ -407,7 +460,8 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
   if (planErr) throw planErr;
 
   // Generate week 1 plan blocks
-  const week1 = outline.weeks.find((w: any) => w.week_number === 1) || outline.weeks[0];
+  const week1 =
+    outline.weeks.find((w: any) => w.week_number === 1) || outline.weeks[0];
   const activePillarCount = week1.pillars.length;
 
   for (const wp of week1.pillars) {
@@ -424,7 +478,9 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       });
     } catch (err: any) {
       console.error(`Block gen failed for pillar ${wp.pillar_name}:`, err);
-      warnings.push(`Failed to generate week 1 block for "${wp.pillar_name}": ${err.message}`);
+      warnings.push(
+        `Failed to generate week 1 block for "${wp.pillar_name}": ${err.message}`,
+      );
     }
   }
 
@@ -438,12 +494,23 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
   if (existingProgress) {
     await supabaseAdmin
       .from("user_progress")
-      .update({ current_day: 1, current_streak: 0, total_tasks_completed: 0, updated_at: new Date().toISOString() })
+      .update({
+        current_day: 1,
+        current_streak: 0,
+        total_tasks_completed: 0,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", existingProgress.id);
   } else {
     await supabaseAdmin
       .from("user_progress")
-      .insert({ user_id: userId, current_day: 1, current_streak: 0, longest_streak: 0, total_tasks_completed: 0 });
+      .insert({
+        user_id: userId,
+        current_day: 1,
+        current_streak: 0,
+        longest_streak: 0,
+        total_tasks_completed: 0,
+      });
   }
 
   return { plan_id: plan.id, total_weeks: outline.total_weeks, warnings };
@@ -475,10 +542,21 @@ async function generateBlock(
   const { userId, planId, weekNumber, pillarId, weeklyGoal } = params;
 
   // Fetch context if not passed
-  const profile = params.profile ||
-    (await supabase.from("user_profile").select("*").eq("user_id", userId).maybeSingle()).data;
+  const profile =
+    params.profile ||
+    (
+      await supabase
+        .from("user_profile")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle()
+    ).data;
 
-  const { data: pillar } = await supabase.from("pillars").select("*").eq("id", pillarId).maybeSingle();
+  const { data: pillar } = await supabase
+    .from("pillars")
+    .select("*")
+    .eq("id", pillarId)
+    .maybeSingle();
   const pillarName = params.pillarName || pillar?.name || "Unknown";
   const pillarLevel = pillar?.current_level || 1;
 
@@ -490,7 +568,11 @@ async function generateBlock(
     .order("priority_order");
 
   // Fetch curated resources
-  const resources = await fetchResourcesForPillar(supabaseAdmin, pillarName, pillarLevel);
+  const resources = await fetchResourcesForPillar(
+    supabaseAdmin,
+    pillarName,
+    pillarLevel,
+  );
 
   // Fetch previous blocks for continuity
   const { data: prevBlocks } = await supabase
@@ -503,36 +585,60 @@ async function generateBlock(
   // Check if this is the first block for this pillar
   const isFirstBlock = !prevBlocks || prevBlocks.length === 0;
 
-  const pacingProfile = profile?.pacing_profile || "steady";
-  const dailyMinutes = parseTimeCommitment(profile);
+  // For interview plans, use interview intensity; for learning plans, use pacing profile
+  const isInterviewPlan =
+    profile?.interview_intensity &&
+    params.activePillarCount &&
+    params.activePillarCount >= 2;
+  const pacingProfile = isInterviewPlan
+    ? "intensive"
+    : profile?.pacing_profile || "steady";
+  const dailyMinutes = isInterviewPlan
+    ? profile.interview_intensity === "100_percent"
+      ? 180
+      : parseTimeCommitment(profile)
+    : parseTimeCommitment(profile);
   const activePillars = params.activePillarCount || 1;
   const minutesForThisPillar = Math.round(dailyMinutes / activePillars);
   const [minTasks, maxTasks] = PACING_TASKS[pacingProfile] || [3, 4];
 
   // Build resource list for prompt
-  const resourceList = resources.length > 0
-    ? resources.map((r: any) =>
-        `- ${r.title} (${r.platform}, ${r.resource_type}): ${r.url}${r.description ? ` — ${r.description}` : ""}`
-      ).join("\n")
-    : "No curated resources available for this skill area. Generate search queries for all tasks.";
+  const resourceList =
+    resources.length > 0
+      ? resources
+          .map(
+            (r: any) =>
+              `- ${r.title} (${r.platform}, ${r.resource_type}): ${r.url}${r.description ? ` — ${r.description}` : ""}`,
+          )
+          .join("\n")
+      : "No curated resources available for this skill area. Generate search queries for all tasks.";
 
-  const prevBlocksSummary = prevBlocks && prevBlocks.length > 0
-    ? prevBlocks.map((b: any) => `- Week ${b.week_number}: ${b.title} — ${b.weekly_goal}`).join("\n")
-    : "First week for this pillar.";
+  const prevBlocksSummary =
+    prevBlocks && prevBlocks.length > 0
+      ? prevBlocks
+          .map(
+            (b: any) =>
+              `- Week ${b.week_number}: ${b.title} — ${b.weekly_goal}`,
+          )
+          .join("\n")
+      : "First week for this pillar.";
 
   // Build tool_setup context for level 1 primers
   let setupContext = "";
   if (pillarLevel === 1 && profile?.tool_setup) {
     const ts = profile.tool_setup;
     const items: string[] = [];
-    if (ts.python_installed === false) items.push("does NOT have Python installed");
+    if (ts.python_installed === false)
+      items.push("does NOT have Python installed");
     if (ts.python_installed === true) items.push("has Python installed");
     if (ts.github_familiar === false) items.push("is NOT familiar with GitHub");
     if (ts.github_familiar === true) items.push("is familiar with GitHub");
     if (ts.has_ide === false) items.push("does NOT have a code editor/IDE");
     if (ts.has_ide === true) items.push("has a code editor/IDE");
-    if (ts.used_practice_platforms === false) items.push("has NOT used practice platforms like HackerRank");
-    if (ts.used_practice_platforms === true) items.push("has used practice platforms");
+    if (ts.used_practice_platforms === false)
+      items.push("has NOT used practice platforms like HackerRank");
+    if (ts.used_practice_platforms === true)
+      items.push("has used practice platforms");
     if (items.length > 0) {
       setupContext = `\n\nSETUP CONTEXT: The learner ${items.join(", ")}. Include any necessary setup steps in the first tasks and in the context_brief.`;
     }
@@ -620,7 +726,12 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
 
   const maxTokens = getMaxTokens(minutesForThisPillar);
 
-  let rawText = await callGemini(geminiApiKey, systemPrompt, userPrompt, maxTokens);
+  let rawText = await callGemini(
+    geminiApiKey,
+    systemPrompt,
+    userPrompt,
+    maxTokens,
+  );
   let block: any;
   try {
     block = parseJSON(rawText);
@@ -628,7 +739,8 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
     // Retry once
     rawText = await callGemini(
       geminiApiKey,
-      systemPrompt + "\n\nCRITICAL: Respond with raw JSON only. No markdown, no commentary, no code fences.",
+      systemPrompt +
+        "\n\nCRITICAL: Respond with raw JSON only. No markdown, no commentary, no code fences.",
       userPrompt,
       maxTokens,
     );
@@ -658,21 +770,25 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
   // Insert plan_tasks
   const tasks = Array.isArray(block.tasks) ? block.tasks : [];
   for (const task of tasks) {
-    const { error: taskErr } = await supabaseAdmin
-      .from("plan_tasks")
-      .insert({
-        plan_block_id: savedBlock.id,
-        user_id: userId,
-        task_order: task.task_order || 1,
-        action: task.action || "Complete the task",
-        platform: task.platform || "Google",
-        resource_type: ["curated", "mock_interview"].includes(task.resource_type) ? task.resource_type : "search_query",
-        url: task.resource_type === "curated" ? (task.url || null) : null,
-        search_query: task.resource_type !== "curated" && task.resource_type !== "mock_interview" ? (task.search_query || null) : null,
-        estimated_time_minutes: task.estimated_time_minutes || null,
-        why_text: task.why_text || null,
-        is_completed: false,
-      });
+    const { error: taskErr } = await supabaseAdmin.from("plan_tasks").insert({
+      plan_block_id: savedBlock.id,
+      user_id: userId,
+      task_order: task.task_order || 1,
+      action: task.action || "Complete the task",
+      platform: task.platform || "Google",
+      resource_type: ["curated", "mock_interview"].includes(task.resource_type)
+        ? task.resource_type
+        : "search_query",
+      url: task.resource_type === "curated" ? task.url || null : null,
+      search_query:
+        task.resource_type !== "curated" &&
+        task.resource_type !== "mock_interview"
+          ? task.search_query || null
+          : null,
+      estimated_time_minutes: task.estimated_time_minutes || null,
+      why_text: task.why_text || null,
+      is_completed: false,
+    });
 
     if (taskErr) {
       console.error("Error inserting task:", taskErr);
@@ -708,9 +824,10 @@ async function extendPlan(
 
   const outline = plan.plan_outline as any;
   const existingWeeks = outline?.weeks || [];
-  const lastWeekNumber = existingWeeks.length > 0
-    ? Math.max(...existingWeeks.map((w: any) => w.week_number))
-    : 0;
+  const lastWeekNumber =
+    existingWeeks.length > 0
+      ? Math.max(...existingWeeks.map((w: any) => w.week_number))
+      : 0;
 
   // Fetch user profile and pillars
   const { data: profile } = await supabase
@@ -743,7 +860,10 @@ async function extendPlan(
     .join("\n");
 
   const pillarList = (pillars || [])
-    .map((p: any) => `- ${p.name} (level ${p.current_level}/5): ${p.description || ""}`)
+    .map(
+      (p: any) =>
+        `- ${p.name} (level ${p.current_level}/5): ${p.description || ""}`,
+    )
     .join("\n");
 
   const pacingProfile = profile?.pacing_profile || "exploratory";
@@ -793,17 +913,22 @@ Respond with ONLY valid JSON, no markdown fences:
   });
 
   const geminiData = await geminiRes.json();
-  const rawText =
-    geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
   // Parse JSON (strip markdown fences if present)
-  const cleaned = rawText.replace(/```(?:json)?\s*/g, "").replace(/```\s*/g, "").trim();
+  const cleaned = rawText
+    .replace(/```(?:json)?\s*/g, "")
+    .replace(/```\s*/g, "")
+    .trim();
   let newWeeks: any[];
   try {
     const parsed = JSON.parse(cleaned);
     newWeeks = parsed.weeks || [];
   } catch {
-    throw Object.assign(new Error("Failed to parse AI response for plan extension"), { status: 500 });
+    throw Object.assign(
+      new Error("Failed to parse AI response for plan extension"),
+      { status: 500 },
+    );
   }
 
   // Append new weeks to outline
@@ -813,7 +938,11 @@ Respond with ONLY valid JSON, no markdown fences:
   await supabaseAdmin
     .from("learning_plans")
     .update({
-      plan_outline: { ...outline, total_weeks: newTotalWeeks, weeks: updatedWeeks },
+      plan_outline: {
+        ...outline,
+        total_weeks: newTotalWeeks,
+        weeks: updatedWeeks,
+      },
       total_weeks: newTotalWeeks,
       updated_at: new Date().toISOString(),
     })
@@ -860,8 +989,17 @@ async function generateInterviewPlan(
 
   // Fetch interview context + pillars
   const [profileRes, pillarsRes] = await Promise.all([
-    supabase.from("user_profile").select("*").eq("user_id", userId).maybeSingle(),
-    supabase.from("pillars").select("*").eq("user_id", userId).eq("is_active", true).order("sort_order"),
+    supabase
+      .from("user_profile")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("pillars")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .order("sort_order"),
   ]);
 
   const profile = profileRes.data;
@@ -873,7 +1011,10 @@ async function generateInterviewPlan(
   const pillars = interviewPillars.length > 0 ? interviewPillars : allPillars;
 
   if (pillars.length === 0) {
-    throw Object.assign(new Error("No pillars found. Complete interview prep setup first."), { status: 400 });
+    throw Object.assign(
+      new Error("No pillars found. Complete interview prep setup first."),
+      { status: 400 },
+    );
   }
 
   // Fetch topic maps for interview pillars
@@ -886,17 +1027,31 @@ async function generateInterviewPlan(
 
   // Determine plan duration
   let planWeeks = profile?.interview_date
-    ? Math.max(1, Math.min(3, Math.ceil((new Date(profile.interview_date).getTime() - Date.now()) / (7 * 24 * 60 * 60 * 1000))))
+    ? Math.max(
+        1,
+        Math.min(
+          3,
+          Math.ceil(
+            (new Date(profile.interview_date).getTime() - Date.now()) /
+              (7 * 24 * 60 * 60 * 1000),
+          ),
+        ),
+      )
     : 2;
 
   const intensity = profile?.interview_intensity || "adapted";
-  const dailyMinutes = intensity === "100_percent" ? 180 : parseTimeCommitment(profile);
+  const dailyMinutes =
+    intensity === "100_percent" ? 180 : parseTimeCommitment(profile);
 
-  const pillarSummaries = pillars.map((p: any) => {
-    const clusters = (topicMaps || []).filter((t: any) => t.pillar_id === p.id);
-    return `- ${p.name} (level ${p.current_level}/5): ${p.description || ""}
+  const pillarSummaries = pillars
+    .map((p: any) => {
+      const clusters = (topicMaps || []).filter(
+        (t: any) => t.pillar_id === p.id,
+      );
+      return `- ${p.name} (level ${p.current_level}/5): ${p.description || ""}
     Topics: ${clusters.map((c: any) => `${c.cluster_name} [${c.subtopics?.join(", ") || ""}]`).join("; ")}`;
-  }).join("\n");
+    })
+    .join("\n");
 
   // Build interview-specific context
   let interviewContext = "";
@@ -980,7 +1135,8 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
   } catch {
     rawText = await callGemini(
       geminiApiKey,
-      systemPrompt + "\n\nCRITICAL: Respond with raw JSON only. No markdown, no commentary, no code fences.",
+      systemPrompt +
+        "\n\nCRITICAL: Respond with raw JSON only. No markdown, no commentary, no code fences.",
       userPrompt,
       4000,
     );
@@ -999,13 +1155,17 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       if (matched) {
         wp.pillar_id = matched.id;
       } else {
-        warnings.push(`Week ${week.week_number}: pillar "${wp.pillar_name}" not found in DB, skipping.`);
+        warnings.push(
+          `Week ${week.week_number}: pillar "${wp.pillar_name}" not found in DB, skipping.`,
+        );
       }
     }
     week.pillars = week.pillars.filter((wp: any) => wp.pillar_id);
   }
 
-  outline.weeks = outline.weeks.filter((w: any) => w.pillars && w.pillars.length > 0);
+  outline.weeks = outline.weeks.filter(
+    (w: any) => w.pillars && w.pillars.length > 0,
+  );
   if (outline.weeks.length === 0) {
     throw new Error("AI interview plan outline matched zero pillars.");
   }
@@ -1051,8 +1211,13 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
           activePillarCount,
         });
       } catch (err: any) {
-        console.error(`Interview block gen failed for ${wp.pillar_name} week ${week.week_number}:`, err);
-        warnings.push(`Failed to generate week ${week.week_number} block for "${wp.pillar_name}": ${err.message}`);
+        console.error(
+          `Interview block gen failed for ${wp.pillar_name} week ${week.week_number}:`,
+          err,
+        );
+        warnings.push(
+          `Failed to generate week ${week.week_number} block for "${wp.pillar_name}": ${err.message}`,
+        );
       }
     }
   }
@@ -1067,7 +1232,13 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
   if (!existingProgress) {
     await supabaseAdmin
       .from("user_progress")
-      .insert({ user_id: userId, current_day: 1, current_streak: 0, longest_streak: 0, total_tasks_completed: 0 });
+      .insert({
+        user_id: userId,
+        current_day: 1,
+        current_streak: 0,
+        longest_streak: 0,
+        total_tasks_completed: 0,
+      });
   }
 
   return { plan_id: plan.id, total_weeks: outline.total_weeks, warnings };
@@ -1095,7 +1266,11 @@ Deno.serve(async (req) => {
     const geminiApiKey = Deno.env.get("GEMINI_API_KEY")!;
     const backgroundSecret = Deno.env.get("INTERNAL_BACKGROUND_SECRET");
     const bgToken = req.headers.get("x-background-token");
-    const isBackgroundCall = !!(backgroundSecret && bgToken && bgToken === backgroundSecret);
+    const isBackgroundCall = !!(
+      backgroundSecret &&
+      bgToken &&
+      bgToken === backgroundSecret
+    );
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
@@ -1112,7 +1287,12 @@ Deno.serve(async (req) => {
     if (!isBackgroundCall) {
       const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
       const ip = req.headers.get("x-forwarded-for") || "unknown";
-      const rateCheck = await checkRateLimit(supabaseAdmin, userId, ip, "generate-plan");
+      const rateCheck = await checkRateLimit(
+        supabaseAdmin,
+        userId,
+        ip,
+        "generate-plan",
+      );
       if (!rateCheck.allowed) {
         return jsonRes({ error: rateCheck.message }, 429);
       }
@@ -1123,7 +1303,12 @@ Deno.serve(async (req) => {
     const { mode } = body;
 
     if (mode === "full_plan") {
-      const result = await generateOutline(supabase, supabaseAdmin, userId, geminiApiKey);
+      const result = await generateOutline(
+        supabase,
+        supabaseAdmin,
+        userId,
+        geminiApiKey,
+      );
       return jsonRes({
         success: true,
         plan_id: result.plan_id,
@@ -1133,35 +1318,74 @@ Deno.serve(async (req) => {
     }
 
     if (mode === "plan_block") {
-      const { plan_id, week_number, pillar_id, weekly_goal, active_pillar_count,
-              difficulty_adjustment, feedback_context } = body;
+      const {
+        plan_id,
+        week_number,
+        pillar_id,
+        weekly_goal,
+        active_pillar_count,
+        difficulty_adjustment,
+        feedback_context,
+      } = body;
       if (!plan_id || !week_number || !pillar_id || !weekly_goal) {
-        return jsonRes({ error: "plan_id, week_number, pillar_id, and weekly_goal are required for plan_block mode" }, 400);
+        return jsonRes(
+          {
+            error:
+              "plan_id, week_number, pillar_id, and weekly_goal are required for plan_block mode",
+          },
+          400,
+        );
       }
-      const result = await generateBlock(supabase, supabaseAdmin, geminiApiKey, {
-        userId,
-        planId: plan_id,
-        weekNumber: week_number,
-        pillarId: pillar_id,
-        weeklyGoal: weekly_goal,
-        activePillarCount: active_pillar_count || 1,
-        difficultyAdjustment: difficulty_adjustment,
-        feedbackContext: feedback_context,
-      });
+      const result = await generateBlock(
+        supabase,
+        supabaseAdmin,
+        geminiApiKey,
+        {
+          userId,
+          planId: plan_id,
+          weekNumber: week_number,
+          pillarId: pillar_id,
+          weeklyGoal: weekly_goal,
+          activePillarCount: active_pillar_count || 1,
+          difficultyAdjustment: difficulty_adjustment,
+          feedbackContext: feedback_context,
+        },
+      );
       return jsonRes({ success: true, block_id: result.block_id });
     }
 
     if (mode === "extend_plan") {
       const { plan_id, additional_weeks } = body;
       if (!plan_id || !additional_weeks) {
-        return jsonRes({ error: "plan_id and additional_weeks are required for extend_plan mode" }, 400);
+        return jsonRes(
+          {
+            error:
+              "plan_id and additional_weeks are required for extend_plan mode",
+          },
+          400,
+        );
       }
-      const result = await extendPlan(supabase, supabaseAdmin, geminiApiKey, userId, plan_id, additional_weeks);
-      return jsonRes({ success: true, new_total_weeks: result.new_total_weeks });
+      const result = await extendPlan(
+        supabase,
+        supabaseAdmin,
+        geminiApiKey,
+        userId,
+        plan_id,
+        additional_weeks,
+      );
+      return jsonRes({
+        success: true,
+        new_total_weeks: result.new_total_weeks,
+      });
     }
 
     if (mode === "interview_plan") {
-      const result = await generateInterviewPlan(supabase, supabaseAdmin, userId, geminiApiKey);
+      const result = await generateInterviewPlan(
+        supabase,
+        supabaseAdmin,
+        userId,
+        geminiApiKey,
+      );
       return jsonRes({
         success: true,
         plan_id: result.plan_id,
@@ -1170,7 +1394,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    return jsonRes({ error: "Invalid mode. Must be: full_plan, plan_block, extend_plan, interview_plan" }, 400);
+    return jsonRes(
+      {
+        error:
+          "Invalid mode. Must be: full_plan, plan_block, extend_plan, interview_plan",
+      },
+      400,
+    );
   } catch (err: any) {
     console.error(err);
     if (err.status === 429) {

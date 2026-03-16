@@ -344,6 +344,7 @@ const InterviewOnboarding = () => {
         interview_intensity: outputs.intensity,
         interview_weak_areas: outputs.weak_areas,
         interview_format: outputs.interview_format,
+        time_commitment: outputs.time_commitment || "90_min_daily",
       };
       interviewData.name = user.email?.split("@")[0] || "Learner";
       await supabase.from("user_profile").upsert(interviewData);
