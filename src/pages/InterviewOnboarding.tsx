@@ -359,7 +359,10 @@ const InterviewOnboarding = () => {
         time_commitment: outputs.time_commitment || "90_min_daily",
       };
       interviewData.name = user.email?.split("@")[0] || "Learner";
-      await supabase.from("user_profile").upsert(interviewData);
+      const { error: profileError } = await supabase
+        .from("user_profile")
+        .upsert(interviewData, { onConflict: "user_id" });
+      if (profileError) throw profileError;
 
       const pillarIds: string[] = [];
       for (let i = 0; i < outputs.interview_pillars.length; i++) {
