@@ -63,13 +63,6 @@ const CrashCourseDashboard = () => {
     localStorage.setItem("pronggsd-dashboard-view", "interview_prep");
   }, []);
 
-  // Track crash course type for mentor persona selection
-  useMemo(() => {
-    if (plan?.crashcourse_type) {
-      localStorage.setItem("pronggsd-crashcourse-type", plan.crashcourse_type);
-    }
-  }, [plan?.crashcourse_type]);
-
   // Modal state
   const [checkinBlock, setCheckinBlock] = useState<PlanBlock | null>(null);
   const [showPlanComplete, setShowPlanComplete] = useState(false);
@@ -93,6 +86,13 @@ const CrashCourseDashboard = () => {
     },
     enabled: !!userId && !!planId,
   });
+
+  // Track crash course type for mentor persona selection
+  useMemo(() => {
+    if (plan?.crashcourse_type) {
+      localStorage.setItem("pronggsd-crashcourse-type", plan.crashcourse_type);
+    }
+  }, [plan?.crashcourse_type]);
 
   const isInterview = plan?.crashcourse_type === "interview";
   const outline = plan?.plan_outline as unknown as PlanOutline | null;

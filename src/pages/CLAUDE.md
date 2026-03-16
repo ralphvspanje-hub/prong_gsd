@@ -27,7 +27,7 @@
 
 ## No-plan redirects (Phase 4 + Phase 9.4)
 
-Dashboard redirects to `/context-upload` when no learning plan exists, or to `/interview-dashboard` when only an interview plan exists. InterviewDashboard redirects to `/dashboard` if no interview plan. ContextUpload redirects to `/dashboard` if plan exists. PlanOverview redirects to `/onboarding` if no plan. Other protected routes remain accessible without a plan (e.g., Settings for uploading resume/LinkedIn before completing onboarding).
+Dashboard redirects to `/context-upload` when no learning plan exists. InterviewDashboard redirects to `/dashboard` if no interview plan. ContextUpload redirects to `/dashboard` if plan exists. PlanOverview redirects to `/onboarding` if no plan. Other protected routes remain accessible without a plan (e.g., Settings for uploading resume/LinkedIn before completing onboarding).
 
 ## Post-rewind flow
 

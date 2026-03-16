@@ -192,7 +192,7 @@ Edge function env vars (set in Supabase dashboard):
 - README says the env var is `VITE_SUPABASE_ANON_KEY` but `client.ts` actually reads `VITE_SUPABASE_PUBLISHABLE_KEY` — use the latter
 - `supabase/config.toml` has `verify_jwt = false` for both edge functions — JWT validation is done manually in the function code
 - Path alias: `@/` maps to `src/`
-- Dashboard (learning) redirects to `/context-upload` if no learning plan; to `/interview-dashboard` if only interview plan exists. InterviewDashboard redirects to `/dashboard` if no interview plan. Block polling has a 30s timeout with retry button on failure.
+- Dashboard (learning) redirects to `/context-upload` if no learning plan. InterviewDashboard redirects to `/dashboard` if no interview plan. Block polling has a 30s timeout with retry button on failure.
 - `gsd-reset-user-data` deletes ProngGSD plan data (plan_tasks → plan_blocks → learning_plans → user_progress) in all modes (rewind, full, delete_account). Rewind preserves profile, pillars, phases, onboarding_conversations — use it to test plan generation without re-doing onboarding.
 - ContextUpload shows "Generate Plan from Existing Pillars" button when pillars exist but no plan (post-rewind state), calling `gsd-generate-plan` directly with `full_plan` mode
 - Demo mode entry point is hidden on Auth page — demo context still exists but is non-functional with new task tracker dashboard

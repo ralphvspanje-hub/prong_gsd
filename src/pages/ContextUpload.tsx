@@ -56,7 +56,8 @@ const ContextUpload = () => {
         .from("learning_plans")
         .select("*", { count: "exact", head: true })
         .eq("user_id", user!.id)
-        .eq("is_active", true);
+        .eq("is_active", true)
+        .eq("plan_type", "learning");
       return (count ?? 0) > 0;
     },
     enabled: !!user?.id,
