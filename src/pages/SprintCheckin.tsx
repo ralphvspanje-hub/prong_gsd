@@ -125,6 +125,30 @@ const SprintCheckin = () => {
         } else if (data.message) {
           setMessages([{ role: "assistant", content: data.message }]);
         }
+
+        // Restore review phase if checkin was already completed
+        if (data.completed && data.summary) {
+          setSummary(data.summary);
+          setSuggestedPillars(data.suggested_pillars || []);
+          const dbPillars =
+            queryClient.getQueryData<any[]>(["pillars", userId]) || [];
+          const matchedNames = (data.suggested_pillars || [])
+            .map(
+              (sp: SuggestedPillar) =>
+                dbPillars.find(
+                  (p: any) =>
+                    p.name.toLowerCase() === sp.pillar_name.toLowerCase() ||
+                    p.name
+                      .toLowerCase()
+                      .includes(sp.pillar_name.toLowerCase()) ||
+                    sp.pillar_name.toLowerCase().includes(p.name.toLowerCase()),
+                )?.name,
+            )
+            .filter(Boolean)
+            .slice(0, 2);
+          setSelectedPillars(matchedNames);
+          setPhase("review");
+        }
       } catch (err: any) {
         toast.error(err.message || "Failed to start check-in");
       } finally {

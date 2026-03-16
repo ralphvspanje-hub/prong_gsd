@@ -223,17 +223,29 @@ async function handleStart(
   const careerGoal = outline?.career_goal || "Career development";
   const pillarRationale = outline?.pillar_rationale || {};
 
-  // Check for existing in-progress checkin
+  // Check for existing checkin (in-progress or completed)
   const { data: existingCheckin } = await supabaseAdmin
     .from("sprint_checkins")
-    .select("id, messages")
+    .select("id, messages, status, ai_summary")
     .eq("plan_id", planId)
     .eq("sprint_number", sprintNumber)
-    .eq("status", "in_progress")
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (existingCheckin) {
-    // Resume existing checkin
+    if (existingCheckin.status === "completed" && existingCheckin.ai_summary) {
+      // Already completed — return summary so frontend can restore review phase
+      return jsonRes({
+        checkin_id: existingCheckin.id,
+        messages: existingCheckin.messages,
+        sprint_number: sprintNumber,
+        completed: true,
+        summary: existingCheckin.ai_summary,
+        suggested_pillars: existingCheckin.ai_summary.suggested_focus || [],
+      });
+    }
+    // Resume in-progress checkin
     return jsonRes({
       checkin_id: existingCheckin.id,
       messages: existingCheckin.messages,
