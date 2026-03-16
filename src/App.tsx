@@ -18,6 +18,9 @@ import PlanOverview from "./pages/PlanOverview";
 import InterviewDashboard from "./pages/InterviewDashboard";
 import InterviewOnboarding from "./pages/InterviewOnboarding";
 import MockInterview from "./pages/MockInterview";
+import CrashCourseSelector from "./pages/CrashCourseSelector";
+import CrashCourseOnboarding from "./pages/CrashCourseOnboarding";
+import CrashCourseDashboard from "./pages/CrashCourseDashboard";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -114,6 +117,30 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <InterviewOnboarding />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/crash-course"
+                  element={
+                    <ProtectedRoute>
+                      <CrashCourseSelector />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/crashcourse-onboarding"
+                  element={
+                    <ProtectedRoute>
+                      <CrashCourseOnboarding />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/crash-course/:planId"
+                  element={
+                    <ProtectedRoute>
+                      <CrashCourseDashboard />
                     </ProtectedRoute>
                   }
                 />

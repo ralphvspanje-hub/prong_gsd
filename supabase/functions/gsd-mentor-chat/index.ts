@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { message, mode } = await req.json();
+    const { message, mode, crashcourse_type } = await req.json();
     if (!message || typeof message !== "string" || message.length > 2000) {
       return new Response(JSON.stringify({ error: "Invalid message" }), {
         status: 400,
@@ -138,8 +138,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Mode determines mentor personality: "interview_prep" = interview coach, default = career mentor
+    // Mode determines mentor personality: "interview_prep" = crash course coach, default = career mentor
     const isInterviewMode = mode === "interview_prep";
+    // Crash course type: "interview" or "generic" (null defaults to interview for backwards compat)
+    const isGenericCrashCourse = crashcourse_type === "generic";
 
     // Load user context — round 1 (parallel)
     const [profileRes, pillarsRes, phasesRes, cyclesRes, planRes, progressRes] =
@@ -375,8 +377,21 @@ ${outlineSummary || "  (empty)"}`;
     }
 
     // Build system prompt — persona switches based on mode
-    const interviewContext = isInterviewMode
-      ? `
+    // For generic crash courses, derive context from plan_outline metadata
+    let crashCourseContext = "";
+    if (isInterviewMode && isGenericCrashCourse && plan) {
+      const planOutline = plan.plan_outline as any;
+      crashCourseContext = `
+CRASH COURSE CONTEXT:
+- Topic: ${planOutline?.crashcourse_topic || "Not set"}
+- Deadline: ${planOutline?.crashcourse_deadline || "Not set"}
+- Duration: ${plan.total_weeks} week(s)
+- Pacing: ${plan.pacing_profile}`;
+    }
+
+    const interviewContext =
+      isInterviewMode && !isGenericCrashCourse
+        ? `
 INTERVIEW CONTEXT:
 - Target Role: ${profile?.interview_target_role || "Not set"}
 - Company: ${profile?.interview_company || "Not set"}
@@ -385,14 +400,28 @@ INTERVIEW CONTEXT:
 - Format: ${profile?.interview_format || "Not set"}
 - Weak Areas: ${((profile?.interview_weak_areas as string[]) || []).join(", ") || "Not set"}
 ${profile?.interview_company_context ? `- Company Context: ${profile.interview_company_context.substring(0, 1000)}` : ""}`
-      : "";
+        : crashCourseContext;
 
     const mentorPersona = isInterviewMode
-      ? `You are ${mentorDisplayName}, the ProngGSD interview coach — a focused, strategic coach helping the user crush their upcoming interview. You know their target role, weak areas, timeline, and prep plan. Every response should drive toward interview readiness. Be direct, tactical, and time-aware — this is a crash course with a deadline.`
+      ? isGenericCrashCourse
+        ? `You are ${mentorDisplayName}, the ProngGSD crash course coach — a focused, strategic coach helping the user power through an intensive study sprint. You know their topic, focus areas, timeline, and study plan. Every response should drive toward mastery of the material before their deadline. Be direct, tactical, and time-aware — this is a crash course with a deadline.`
+        : `You are ${mentorDisplayName}, the ProngGSD interview coach — a focused, strategic coach helping the user crush their upcoming interview. You know their target role, weak areas, timeline, and prep plan. Every response should drive toward interview readiness. Be direct, tactical, and time-aware — this is a crash course with a deadline.`
       : `You are ${mentorDisplayName}, the ProngGSD career mentor — a sharp, thoughtful thinking partner focused on the user's long-term career growth. You ask before you act. Never change pillars, plan structure, or settings without explicit user confirmation.`;
 
     const behaviorRules = isInterviewMode
-      ? `BEHAVIOR RULES:
+      ? isGenericCrashCourse
+        ? `BEHAVIOR RULES:
+- You are a crash course coach. Every answer should connect back to mastering the material before the deadline.
+- Reference the deadline and remaining time when relevant — create urgency without panic.
+- When discussing weak areas: be specific about what to study and how, with concrete strategies.
+- When the user is stuck: give direct tactical advice with specific study techniques or resources.
+- When proposing changes: focus on what maximizes preparedness in the remaining time.
+- When proposing pacing changes: frame in terms of "days until deadline" and what can realistically be covered.
+- For swap_resource: suggest study-specific resources (courses, practice tests, reference materials).
+- If PATTERN ALERTS exist, reference them with deadline urgency.
+- Keep responses focused, tactical, and topic-specific. Stay within the crash course scope.
+- You are not a general chatbot — stay within the user's crash course strategy and study plan.`
+        : `BEHAVIOR RULES:
 - You are an interview coach. Every answer should connect back to interview performance.
 - Reference the interview date and remaining time when relevant — create urgency without panic.
 - When discussing weak areas: be specific about what to practice and how, with concrete drills or frameworks.

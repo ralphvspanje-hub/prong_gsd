@@ -1,4 +1,3 @@
-Initialising login role...
 export type Json =
   | string
   | number
@@ -12,31 +11,6 @@ export type Database = {
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.4"
-  }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
   }
   public: {
     Tables: {
@@ -158,6 +132,7 @@ export type Database = {
       }
       learning_plans: {
         Row: {
+          crashcourse_type: string | null
           created_at: string | null
           id: string
           is_active: boolean | null
@@ -169,6 +144,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          crashcourse_type?: string | null
           created_at?: string | null
           id?: string
           is_active?: boolean | null
@@ -180,6 +156,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          crashcourse_type?: string | null
           created_at?: string | null
           id?: string
           is_active?: boolean | null
@@ -1013,12 +990,7 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },
 } as const
-A new version of Supabase CLI is available: v2.78.1 (currently installed v2.75.0)
-We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

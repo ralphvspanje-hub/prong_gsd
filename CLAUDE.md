@@ -4,7 +4,7 @@
 
 ProngGSD ("Get Shit Done") is an AI-powered learning orchestrator, forked from DailyProng. Instead of generating learning content directly, it builds personalized multi-week plans that route users to the best external platforms for each skill, with task tracking and pacing adaptation. Users complete a structured AI onboarding, then follow a plan of daily tasks with external resources. An AI mentor provides ongoing career guidance and can restructure the plan. Dark/light theme.
 
-**Status:** Phase 9 (Interview Prep Mode) in progress. Phase 4 complete: separate interview prep dashboard at `/interview-dashboard` with dedicated navigation, interview-focused mentor mode, and clean learning/interview separation. Phase 3 complete: main onboarding detects interview prep focus and routes to `/interview-onboarding`. Phase 2 complete: AI mock interviews with edge function (`gsd-mock-interview`), chat UI (`/mock-interview/:id`), "Start Mock Interview" button on tasks, mistake journal (form + dashboard display). Phase 1 complete: parallel interview prep crash course. Previous: Phase 8 (Polish and Launch Prep) complete. See `IMPLEMENTATION_DOC_LEARNING_ORCHESTRATOR.md` for the full vision.
+**Status:** Phase 9.5 (Crash Course Mode) in progress. Generalized interview prep into a "Crash Course" concept supporting any intensive short-term goal. Header button entry point, type selector at `/crash-course`, generic onboarding at `/crashcourse-onboarding`, unified dashboard at `/crash-course/:planId`. Max 3 concurrent crash courses. Phase 9.4 complete: separate interview prep dashboard. Phase 9.3: main onboarding detects interview focus. Phase 9.2: AI mock interviews. Phase 9.1: parallel interview prep. Phase 8 (Polish and Launch Prep) complete. See `IMPLEMENTATION_DOC_LEARNING_ORCHESTRATOR.md` for the full vision.
 
 ## Tech Stack
 
@@ -42,6 +42,7 @@ prong_gsd/
 │       ├── gsd-mentor-chat/         # AI mentor conversation
 │       ├── gsd-apply-mentor-changes/ # Apply pillar mutations
 │       ├── gsd-generate-plan/       # AI plan generation (multi-week outlines + weekly plan blocks)
+│       ├── gsd-crashcourse-onboarding/ # AI generic crash course onboarding (open-ended chat)
 │       ├── gsd-interview-onboarding/ # AI interview prep mini-onboarding (3-4 turns)
 │       ├── gsd-mock-interview/      # AI mock interview sessions (start/continue/complete)
 │       ├── gsd-onboarding-chat/     # AI onboarding conversation
@@ -92,6 +93,8 @@ Each subfolder has its own `CLAUDE.md`. Read it when working in that folder.
 
 `plan_type` — `'learning'` (default) or `'interview_prep'`. Both can be `is_active = true` simultaneously.
 
+`crashcourse_type` — `'interview'`, `'generic'`, or null. Distinguishes interview prep from generic crash courses. All crash courses use `plan_type: 'interview_prep'` for backwards compat. Generic crash courses store `crashcourse_topic` and `crashcourse_deadline` in `plan_outline` JSON.
+
 ### New columns on user_profile
 
 `pacing_profile`, `time_commitment`, `job_situation`, `job_timeline_weeks`, `tool_setup`, `resume_text`, `linkedin_context`, `interview_target_role`, `interview_company`, `interview_company_context`, `interview_date`, `interview_intensity`, `interview_weak_areas`, `interview_format`
@@ -138,23 +141,26 @@ Everything in `src/components/ui/` is a shadcn/ui primitive. Add new ones via th
 
 ## Routes
 
-| Path                    | Component           | Guard     | Purpose                                                                                                                                                                                                    |
-| ----------------------- | ------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/auth`                 | Auth                | AuthRoute | Login/signup (demo hidden)                                                                                                                                                                                 |
-| `/`                     | —                   | —         | Redirects to `/dashboard`                                                                                                                                                                                  |
-| `/dashboard`            | Dashboard           | Protected | Learning plan daily task view. Redirects to `/context-upload` if no plan, `/interview-dashboard` if only interview plan exists.                                                                            |
-| `/interview-dashboard`  | InterviewDashboard  | Protected | Dedicated interview prep dashboard — countdown, tasks, mistake journal. Redirects to `/dashboard` if no interview plan.                                                                                    |
-| `/plan`                 | PlanOverview        | Protected | Full multi-week plan timeline (redirects to `/onboarding` if no plan)                                                                                                                                      |
-| `/context-upload`       | ContextUpload       | Protected | Resume/LinkedIn PDF upload before onboarding (optional, skippable). Redirects to `/dashboard` if plan exists. If pillars exist but no plan (post-rewind), shows "Generate Plan" button to skip onboarding. |
-| `/onboarding`           | Onboarding          | Protected | AI onboarding chat                                                                                                                                                                                         |
-| `/interview-onboarding` | InterviewOnboarding | Protected | Interview prep mini-onboarding (3-4 turns)                                                                                                                                                                 |
-| `/mock-interview/:id`   | MockInterview       | Protected | AI mock interview chat + feedback + mistake journal                                                                                                                                                        |
-| `/progress`             | Progress            | Protected | Plan-based progress: stats, streak + heatmap, weekly/pillar charts (Recharts), pillar levels, plan summary                                                                                                 |
-| `/history`              | History             | Protected | Plan blocks with tasks, searchable/filterable by pillar and week                                                                                                                                           |
-| `/settings`             | SettingsPage        | Protected | Profile, mentor name, pillars, LinkedIn/resume context, danger zone                                                                                                                                        |
-| `/mentor`               | Mentor              | Protected | AI mentor chat (plan-aware, multi-action)                                                                                                                                                                  |
-| `/about`                | About               | None      | Static "What is a Prong?" page                                                                                                                                                                             |
-| `*`                     | NotFound            | None      | 404                                                                                                                                                                                                        |
+| Path                      | Component             | Guard     | Purpose                                                                                                                                                                                                    |
+| ------------------------- | --------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/auth`                   | Auth                  | AuthRoute | Login/signup (demo hidden)                                                                                                                                                                                 |
+| `/`                       | —                     | —         | Redirects to `/dashboard`                                                                                                                                                                                  |
+| `/dashboard`              | Dashboard             | Protected | Learning plan daily task view. Redirects to `/context-upload` if no plan.                                                                                                                                  |
+| `/crash-course`           | CrashCourseSelector   | Protected | Crash course type selector + active crash course list. Entry point for all crash courses.                                                                                                                  |
+| `/crash-course/:planId`   | CrashCourseDashboard  | Protected | Unified crash course dashboard — handles both interview and generic types. Countdown, tasks, conditional mock/mistake features.                                                                            |
+| `/crashcourse-onboarding` | CrashCourseOnboarding | Protected | Generic crash course AI onboarding (open-ended chat → review → confirm). Straight to chat, no upload phase.                                                                                                |
+| `/interview-dashboard`    | InterviewDashboard    | Protected | Backwards-compat redirect — finds active interview plan and redirects to `/crash-course/:planId`.                                                                                                          |
+| `/plan`                   | PlanOverview          | Protected | Full multi-week plan timeline (redirects to `/onboarding` if no plan)                                                                                                                                      |
+| `/context-upload`         | ContextUpload         | Protected | Resume/LinkedIn PDF upload before onboarding (optional, skippable). Redirects to `/dashboard` if plan exists. If pillars exist but no plan (post-rewind), shows "Generate Plan" button to skip onboarding. |
+| `/onboarding`             | Onboarding            | Protected | AI onboarding chat                                                                                                                                                                                         |
+| `/interview-onboarding`   | InterviewOnboarding   | Protected | Interview prep mini-onboarding (3-4 turns). Redirects to `/crash-course/:planId` on completion.                                                                                                            |
+| `/mock-interview/:id`     | MockInterview         | Protected | AI mock interview chat + feedback + mistake journal                                                                                                                                                        |
+| `/progress`               | Progress              | Protected | Plan-based progress: stats, streak + heatmap, weekly/pillar charts (Recharts), pillar levels, plan summary                                                                                                 |
+| `/history`                | History               | Protected | Plan blocks with tasks, searchable/filterable by pillar and week                                                                                                                                           |
+| `/settings`               | SettingsPage          | Protected | Profile, mentor name, pillars, LinkedIn/resume context, danger zone                                                                                                                                        |
+| `/mentor`                 | Mentor                | Protected | AI mentor chat (plan-aware, multi-action)                                                                                                                                                                  |
+| `/about`                  | About                 | None      | Static "What is a Prong?" page                                                                                                                                                                             |
+| `*`                       | NotFound              | None      | 404                                                                                                                                                                                                        |
 
 ## Running the App
 
@@ -221,10 +227,17 @@ Edge function env vars (set in Supabase dashboard):
 - MistakeJournalDisplay appears on InterviewDashboard (always shown) — shows last 10 mistakes with pattern detection
 - `gsd-reset-user-data` deletes `mistake_journal` → `mock_interviews` before `plan_tasks` (FK order)
 - Main onboarding detects interview prep focus: if `outputs.primary_focus === "interview_prep"` AND `job_timeline_weeks <= 3`, Onboarding.tsx routes to `/interview-onboarding` instead of generating a learning plan. Conservative — defaults to `long_term_learning` when ambiguous.
-- Phase 4: Dashboard and InterviewDashboard are fully separate pages. `DashboardToggle.tsx` was deleted. Layout.tsx swaps nav items based on current path (paths starting with `/interview-dashboard` or `/mock-interview` show interview nav).
+- Phase 4: Dashboard and InterviewDashboard are fully separate pages. `DashboardToggle.tsx` was deleted. Layout.tsx swaps nav items based on current path.
 - Phase 4: `gsd-mentor-chat` accepts optional `mode` param (`"learning"` or `"interview_prep"`). When interview mode: uses interview coach persona, filters pillars to `sort_order >= 100`, filters plan to `interview_prep` type, adds INTERVIEW CONTEXT section with date/company/weak areas.
-- Phase 4: InterviewOnboarding.tsx redirects to `/interview-dashboard` (not `/dashboard`) on completion. MockInterview.tsx "Back to Dashboard" links to `/interview-dashboard`.
-- Phase 4: Mentor.tsx derives `mentorMode` from localStorage `pronggsd-dashboard-view`. Shows `INTERVIEW_QUICK_ACTIONS` when in interview mode, `LEARNING_QUICK_ACTIONS` otherwise. Opening message adapts to mode.
+- Phase 9.5: InterviewDashboard.tsx is now a redirect wrapper — finds active interview plan and redirects to `/crash-course/:planId`. All crash course dashboards use CrashCourseDashboard.tsx.
+- Phase 9.5: Layout.tsx has a prominent orange "Crash Course" header button (desktop). `CRASH_COURSE_PATHS` expanded from `INTERVIEW_PATHS` to include all crash course routes. When in crash course mode, button shows "Back to Learning" instead.
+- Phase 9.5: CrashCourseSelector at `/crash-course` shows type picker (Interview Prep + Something Else) when no active crash courses, or active plan cards + "Start New" when plans exist. Max 3 concurrent crash courses.
+- Phase 9.5: CrashCourseOnboarding at `/crashcourse-onboarding` goes straight to AI chat (no upload phase). AI insists on context/materials. Uses `gsd-crashcourse-onboarding` edge function with `[CRASHCOURSE_COMPLETE]` tag pattern.
+- Phase 9.5: `gsd-generate-plan` `interview_plan` mode now accepts optional `crashcourse_type`, `crashcourse_topic`, `crashcourse_deadline` params. Generic crash courses use adapted prompts without interview-specific content (no mock interviews, no STAR method references).
+- Phase 9.5: `gsd-mentor-chat` accepts optional `crashcourse_type` param. Generic crash courses get "crash course coach" persona instead of "interview coach". Behavior rules adapted for study focus.
+- Phase 9.5: Mentor.tsx has 3 quick action sets: `LEARNING_QUICK_ACTIONS`, `INTERVIEW_QUICK_ACTIONS`, `GENERIC_CRASHCOURSE_QUICK_ACTIONS`. Selection based on localStorage `pronggsd-dashboard-view` + `pronggsd-crashcourse-type`.
+- Phase 9.5: InterviewOnboarding.tsx now redirects to `/crash-course/:planId` (not `/interview-dashboard`) and passes `crashcourse_type: "interview"` to plan generation.
+- Phase 9.5: `learning_plans.crashcourse_type` column: `'interview'` or `'generic'` for crash courses, null for learning plans. All crash courses still use `plan_type: 'interview_prep'`.
 
 ---
 

@@ -1,9 +1,11 @@
 import { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useDemo } from "@/hooks/useDemo";
 import { useTheme } from "@/hooks/useTheme";
 import { useMentorName } from "@/hooks/useMentorName";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Sun,
   Moon,
@@ -15,23 +17,59 @@ import {
   Settings,
   MessageSquare,
   Target,
+  ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// Paths that indicate the user is in interview prep mode
-const INTERVIEW_PATHS = ["/interview-dashboard", "/mock-interview"];
+// Paths that indicate the user is in crash course mode (expanded from INTERVIEW_PATHS)
+const CRASH_COURSE_PATHS = [
+  "/crash-course",
+  "/crashcourse-onboarding",
+  "/interview-dashboard",
+  "/interview-onboarding",
+  "/mock-interview",
+];
 
 export const Layout = ({ children }: { children: ReactNode }) => {
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
   const { isDemo, disableDemo } = useDemo();
   const { theme, toggleTheme } = useTheme();
   const { mentorName } = useMentorName();
   const location = useLocation();
   const navigate = useNavigate();
+  const userId = user?.id;
 
-  const isInterviewMode = INTERVIEW_PATHS.some((p) =>
+  const isCrashCourseMode = CRASH_COURSE_PATHS.some((p) =>
     location.pathname.startsWith(p),
   );
+
+  // Query active crash course plans for the header button
+  const { data: crashPlans } = useQuery({
+    queryKey: ["crash-course-plans-count", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("learning_plans")
+        .select("id")
+        .eq("user_id", userId!)
+        .eq("is_active", true)
+        .eq("plan_type", "interview_prep");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!userId && !isDemo,
+    staleTime: 30000,
+  });
+
+  const crashPlanCount = crashPlans?.length ?? 0;
+
+  // Determine where the crash course button navigates
+  const handleCrashCourseClick = () => {
+    if (crashPlanCount === 1 && crashPlans) {
+      navigate(`/crash-course/${crashPlans[0].id}`);
+    } else {
+      navigate("/crash-course");
+    }
+  };
 
   // Learning nav items (default)
   const learningNavItems = [
@@ -58,10 +96,10 @@ export const Layout = ({ children }: { children: ReactNode }) => {
     },
   ];
 
-  // Interview prep nav items (swapped when on interview pages)
-  const interviewNavItems = [
+  // Crash course nav items (swapped when on crash course pages)
+  const crashCourseNavItems = [
     {
-      path: "/interview-dashboard",
+      path: "/crash-course",
       label: "Prep",
       icon: Target,
       mobileVisible: true,
@@ -87,10 +125,10 @@ export const Layout = ({ children }: { children: ReactNode }) => {
     },
   ];
 
-  const navItems = isInterviewMode ? interviewNavItems : learningNavItems;
+  const navItems = isCrashCourseMode ? crashCourseNavItems : learningNavItems;
 
   // Logo links to the appropriate dashboard
-  const homePath = isInterviewMode ? "/interview-dashboard" : "/dashboard";
+  const homePath = isCrashCourseMode ? "/crash-course" : "/dashboard";
 
   const handleSignOut = () => {
     if (isDemo) {
@@ -110,7 +148,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
             <span className="font-serif text-lg font-bold tracking-tight">
               ProngGSD
             </span>
-            {isInterviewMode && (
+            {isCrashCourseMode && (
               <span className="text-[10px] font-medium text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded">
                 PREP
               </span>
@@ -135,6 +173,27 @@ export const Layout = ({ children }: { children: ReactNode }) => {
           </nav>
 
           <div className="flex items-center gap-1">
+            {/* Crash Course header button */}
+            {isCrashCourseMode ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-muted-foreground hidden md:flex"
+                onClick={() => navigate("/dashboard")}
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back to Learning
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                className="gap-1.5 bg-orange-500 hover:bg-orange-600 text-white hidden md:flex"
+                onClick={handleCrashCourseClick}
+              >
+                <Zap className="h-3.5 w-3.5" />
+                Crash Course
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"

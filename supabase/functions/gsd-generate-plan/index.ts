@@ -502,15 +502,13 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       })
       .eq("id", existingProgress.id);
   } else {
-    await supabaseAdmin
-      .from("user_progress")
-      .insert({
-        user_id: userId,
-        current_day: 1,
-        current_streak: 0,
-        longest_streak: 0,
-        total_tasks_completed: 0,
-      });
+    await supabaseAdmin.from("user_progress").insert({
+      user_id: userId,
+      current_day: 1,
+      current_streak: 0,
+      longest_streak: 0,
+      total_tasks_completed: 0,
+    });
   }
 
   return { plan_id: plan.id, total_weeks: outline.total_weeks, warnings };
@@ -984,7 +982,14 @@ async function generateInterviewPlan(
   supabaseAdmin: any,
   userId: string,
   geminiApiKey: string,
+  opts?: {
+    crashcourse_type?: string;
+    crashcourse_topic?: string;
+    crashcourse_deadline?: string;
+  },
 ): Promise<{ plan_id: string; total_weeks: number; warnings: string[] }> {
+  const crashcourseType = opts?.crashcourse_type || "interview";
+  const isGeneric = crashcourseType === "generic";
   const warnings: string[] = [];
 
   // Fetch interview context + pillars
@@ -1025,21 +1030,26 @@ async function generateInterviewPlan(
     .in("pillar_id", pillarIds)
     .order("priority_order");
 
-  // Determine plan duration
-  let planWeeks = profile?.interview_date
+  // Determine plan duration — use crashcourse_deadline for generic, interview_date for interview
+  const deadlineStr = isGeneric
+    ? opts?.crashcourse_deadline
+    : profile?.interview_date;
+  let planWeeks = deadlineStr
     ? Math.max(
         1,
         Math.min(
           3,
           Math.ceil(
-            (new Date(profile.interview_date).getTime() - Date.now()) /
+            (new Date(deadlineStr).getTime() - Date.now()) /
               (7 * 24 * 60 * 60 * 1000),
           ),
         ),
       )
     : 2;
 
-  const intensity = profile?.interview_intensity || "adapted";
+  const intensity = isGeneric
+    ? "adapted"
+    : profile?.interview_intensity || "adapted";
   const dailyMinutes =
     intensity === "100_percent" ? 180 : parseTimeCommitment(profile);
 
@@ -1053,22 +1063,31 @@ async function generateInterviewPlan(
     })
     .join("\n");
 
-  // Build interview-specific context
+  // Build context section — differs for interview vs generic crash courses
   let interviewContext = "";
-  if (profile?.interview_target_role) {
-    interviewContext += `\nTARGET ROLE: ${profile.interview_target_role}`;
-  }
-  if (profile?.interview_company) {
-    interviewContext += `\nCOMPANY: ${profile.interview_company}`;
-  }
-  if (profile?.interview_company_context) {
-    interviewContext += `\nCOMPANY CONTEXT: ${profile.interview_company_context}`;
-  }
-  if (profile?.interview_format) {
-    interviewContext += `\nINTERVIEW FORMAT: ${profile.interview_format}`;
-  }
-  if (profile?.interview_weak_areas?.length > 0) {
-    interviewContext += `\nWEAK AREAS: ${profile.interview_weak_areas.join(", ")}`;
+  if (isGeneric) {
+    if (opts?.crashcourse_topic) {
+      interviewContext += `\nTOPIC: ${opts.crashcourse_topic}`;
+    }
+    if (opts?.crashcourse_deadline) {
+      interviewContext += `\nDEADLINE: ${opts.crashcourse_deadline}`;
+    }
+  } else {
+    if (profile?.interview_target_role) {
+      interviewContext += `\nTARGET ROLE: ${profile.interview_target_role}`;
+    }
+    if (profile?.interview_company) {
+      interviewContext += `\nCOMPANY: ${profile.interview_company}`;
+    }
+    if (profile?.interview_company_context) {
+      interviewContext += `\nCOMPANY CONTEXT: ${profile.interview_company_context}`;
+    }
+    if (profile?.interview_format) {
+      interviewContext += `\nINTERVIEW FORMAT: ${profile.interview_format}`;
+    }
+    if (profile?.interview_weak_areas?.length > 0) {
+      interviewContext += `\nWEAK AREAS: ${profile.interview_weak_areas.join(", ")}`;
+    }
   }
 
   let extraContext = "";
@@ -1079,9 +1098,49 @@ async function generateInterviewPlan(
     extraContext += `\n\nLINKEDIN CONTEXT:\n${profile.linkedin_context.slice(0, 3000)}`;
   }
 
-  const systemPrompt = `You are ProngGSD Interview Prep Architect. You build aggressive, daily-granularity crash course plans for job interviews.
+  const crashCourseLabel = isGeneric ? "Crash Course" : "Interview Prep";
+  const architectLabel = isGeneric
+    ? "ProngGSD Crash Course Architect"
+    : "ProngGSD Interview Prep Architect";
+  const contextLabel = isGeneric ? "CRASH COURSE CONTEXT" : "INTERVIEW CONTEXT";
 
-INTERVIEW CONTEXT:
+  const planRules = isGeneric
+    ? `CRASH COURSE PLAN RULES:
+- Generate a ${planWeeks}-week plan with DAILY milestones — every single day must have a clear focus.
+- Each week has ALL pillars active. This is a crash course — parallel study, not sequential.
+- For each pillar each week, provide a specific weekly_goal that builds on the previous week.
+- Week 1 starts with FOUNDATIONS: key concepts, terminology, and structure of the topic.
+- Final week focuses on review, practice tests, and consolidation.
+- Difficulty should ramp: Week 1 = foundation, Week 2+ = deep practice at target difficulty.
+- ${intensity === "100_percent" ? "This is a full-time sprint. Pack every day with meaningful work." : "Respect the time budget but don't waste a single minute."}
+- Do NOT include mock interview slots (this is not interview prep).`
+    : `INTERVIEW PREP PLAN RULES:
+- Generate a ${planWeeks}-week plan with DAILY milestones — every single day must have a clear focus.
+- Each week has ALL pillars active. Interview prep is parallel, not sequential.
+- For each pillar each week, provide a specific weekly_goal that builds on the previous week.
+- Include mock interview slots: 1-3 per day depending on intensity. Mark these clearly with "MOCK:" prefix in the weekly_goal.
+- Week 1 starts with CONTEXT: how companies typically test each skill. Then practice.
+- Final week is heavy on mock interviews and review — simulating real interview conditions.
+- Difficulty should ramp: Week 1 = foundation + context, Week 2+ = practice + mocks at interview difficulty.
+- ${intensity === "100_percent" ? "This is a full-time sprint. Pack every day with meaningful work." : "Respect the time budget but don't waste a single minute."}`;
+
+  const contextFirstApproach = isGeneric
+    ? `FOUNDATIONS-FIRST APPROACH (critical):
+For each pillar's first week, the weekly_goal MUST start with the key concepts and structure:
+- Explain what the core concepts are and how they connect.
+- Identify what's most commonly tested or assessed.
+- Provide a clear learning path from basic to advanced.
+Be specific to the actual topic.`
+    : `CONTEXT-FIRST APPROACH (critical):
+For each pillar's first week, the weekly_goal MUST start with explaining HOW companies test that skill:
+- SQL: "Companies test window functions, CTEs, and optimization. Practice format: 45-min timed SQL test. Start with..."
+- Behavioral: "STAR method is the standard. Interviewers look for specificity, impact metrics, and team dynamics. Start with..."
+- System Design: "You'll get 45-60 min to design a system. They evaluate trade-offs, scalability thinking, and communication. Start with..."
+- Etc. Be specific to the actual interview format.`;
+
+  const systemPrompt = `You are ${architectLabel}. You build aggressive, daily-granularity crash course plans for ${isGeneric ? "intensive short-term learning goals" : "job interviews"}.
+
+${contextLabel}:
 ${interviewContext}
 
 LEARNER PROFILE:
@@ -1092,22 +1151,9 @@ PILLARS:
 ${pillarSummaries}
 ${extraContext}
 
-INTERVIEW PREP PLAN RULES:
-- Generate a ${planWeeks}-week plan with DAILY milestones — every single day must have a clear focus.
-- Each week has ALL pillars active. Interview prep is parallel, not sequential.
-- For each pillar each week, provide a specific weekly_goal that builds on the previous week.
-- Include mock interview slots: 1-3 per day depending on intensity. Mark these clearly with "MOCK:" prefix in the weekly_goal.
-- Week 1 starts with CONTEXT: how companies typically test each skill. Then practice.
-- Final week is heavy on mock interviews and review — simulating real interview conditions.
-- Difficulty should ramp: Week 1 = foundation + context, Week 2+ = practice + mocks at interview difficulty.
-- ${intensity === "100_percent" ? "This is a full-time sprint. Pack every day with meaningful work." : "Respect the time budget but don't waste a single minute."}
+${planRules}
 
-CONTEXT-FIRST APPROACH (critical):
-For each pillar's first week, the weekly_goal MUST start with explaining HOW companies test that skill:
-- SQL: "Companies test window functions, CTEs, and optimization. Practice format: 45-min timed SQL test. Start with..."
-- Behavioral: "STAR method is the standard. Interviewers look for specificity, impact metrics, and team dynamics. Start with..."
-- System Design: "You'll get 45-60 min to design a system. They evaluate trade-offs, scalability thinking, and communication. Start with..."
-- Etc. Be specific to the actual interview format.
+${contextFirstApproach}
 
 Respond with ONLY valid JSON, no markdown fences, no commentary:
 {
@@ -1179,7 +1225,13 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
     .eq("is_active", true)
     .eq("plan_type", "interview_prep");
 
-  // Insert interview prep plan
+  // Store crash course metadata in the outline for dashboard display
+  if (isGeneric) {
+    outline.crashcourse_topic = opts?.crashcourse_topic || null;
+    outline.crashcourse_deadline = opts?.crashcourse_deadline || null;
+  }
+
+  // Insert crash course plan
   const { data: plan, error: planErr } = await supabaseAdmin
     .from("learning_plans")
     .insert({
@@ -1189,6 +1241,7 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       plan_outline: outline,
       is_active: true,
       plan_type: "interview_prep",
+      crashcourse_type: crashcourseType,
     })
     .select()
     .single();
@@ -1230,15 +1283,13 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
     .maybeSingle();
 
   if (!existingProgress) {
-    await supabaseAdmin
-      .from("user_progress")
-      .insert({
-        user_id: userId,
-        current_day: 1,
-        current_streak: 0,
-        longest_streak: 0,
-        total_tasks_completed: 0,
-      });
+    await supabaseAdmin.from("user_progress").insert({
+      user_id: userId,
+      current_day: 1,
+      current_streak: 0,
+      longest_streak: 0,
+      total_tasks_completed: 0,
+    });
   }
 
   return { plan_id: plan.id, total_weeks: outline.total_weeks, warnings };
@@ -1385,6 +1436,11 @@ Deno.serve(async (req) => {
         supabaseAdmin,
         userId,
         geminiApiKey,
+        {
+          crashcourse_type: body.crashcourse_type || "interview",
+          crashcourse_topic: body.crashcourse_topic,
+          crashcourse_deadline: body.crashcourse_deadline,
+        },
       );
       return jsonRes({
         success: true,

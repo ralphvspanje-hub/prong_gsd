@@ -329,3 +329,10 @@ If you resolved it, also update the relevant CLAUDE.md immediately and mark this
 **File/folder affected:** `src/pages/Dashboard.tsx`
 **What I did:** (1) Added `buildSectionSeq` helper mirroring the edge function's section sequence logic; compute `nextSectionType` from `nonBonusCount` as a fallback when no pre-gen unit exists. (2) Added `lastCompletedTopic`/`lastCompletedType` local state — saved from `pendingUnit` in `handleFeedback` before clearing, used as fallbacks in the derivation lines, reset in `selectPillar`.
 **Status:** Fixed
+
+## 2026-03-16 — Phase 9.5: Crash Course Mode implementation
+
+**What was confusing / wrong:** CLAUDE.md described `/interview-dashboard` as the primary crash course dashboard and Dashboard.tsx as having interview prep cards. Both were outdated after this phase — InterviewDashboard is now a redirect, Dashboard no longer has crash course cards.
+**File/folder affected:** `CLAUDE.md` routes table, gotchas section
+**What I did:** Updated CLAUDE.md with new routes (`/crash-course`, `/crash-course/:planId`, `/crashcourse-onboarding`), new edge function (`gsd-crashcourse-onboarding`), new column (`crashcourse_type`), and Phase 9.5 gotchas covering all architectural changes.
+**Status:** Fixed

@@ -139,6 +139,39 @@ const INTERVIEW_QUICK_ACTIONS = [
   },
 ];
 
+const GENERIC_CRASHCOURSE_QUICK_ACTIONS = [
+  {
+    label: "Review Progress",
+    icon: BarChart3,
+    message:
+      "Can you review my crash course progress and tell me what I should focus on next?",
+  },
+  {
+    label: "Adjust Timeline",
+    icon: Gauge,
+    message:
+      "I want to adjust the pacing of my crash course — it might be too much or too little right now.",
+  },
+  {
+    label: "Replan Remaining",
+    icon: RefreshCw,
+    message:
+      "I want to restructure my remaining crash course time. Can you help me reprioritize?",
+  },
+  {
+    label: "Swap Resources",
+    icon: ArrowLeftRight,
+    message:
+      "I'd like to find different study resources for one of my current tasks.",
+  },
+  {
+    label: "I'm Stuck",
+    icon: HelpCircle,
+    message:
+      "I'm stuck on a topic in my crash course. Can you help me figure out a way forward?",
+  },
+];
+
 const ACTION_TOASTS: Record<string, string> = {
   adjust_pacing: "Pacing updated!",
   restructure_plan: "Plan updated — upcoming weeks will regenerate.",
@@ -183,14 +216,17 @@ const Mentor = () => {
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
 
-  // Derive mentor mode from localStorage (set by Dashboard / InterviewDashboard on mount)
+  // Derive mentor mode from localStorage (set by Dashboard / CrashCourseDashboard on mount)
   const mentorMode =
     localStorage.getItem("pronggsd-dashboard-view") === "interview_prep"
       ? "interview_prep"
       : "learning";
+  const crashCourseType = localStorage.getItem("pronggsd-crashcourse-type");
   const QUICK_ACTIONS =
     mentorMode === "interview_prep"
-      ? INTERVIEW_QUICK_ACTIONS
+      ? crashCourseType === "generic"
+        ? GENERIC_CRASHCOURSE_QUICK_ACTIONS
+        : INTERVIEW_QUICK_ACTIONS
       : LEARNING_QUICK_ACTIONS;
 
   const [messages, setMessages] = useState<MentorMessage[]>([]);
@@ -269,7 +305,11 @@ const Mentor = () => {
       const { data, error } = await supabase.functions.invoke(
         "gsd-mentor-chat",
         {
-          body: { message: messageText, mode: mentorMode },
+          body: {
+            message: messageText,
+            mode: mentorMode,
+            crashcourse_type: crashCourseType || undefined,
+          },
         },
       );
       if (error) {
@@ -357,7 +397,9 @@ const Mentor = () => {
 
   const openingMessage =
     mentorMode === "interview_prep"
-      ? `Hey! I'm ${mentorName} — your interview prep coach. I know your target role, your weak areas, your timeline, and your crash course plan. Let's make sure you're ready. What do you need?`
+      ? crashCourseType === "generic"
+        ? `Hey! I'm ${mentorName} — your crash course coach. I know your study plan, your focus areas, your timeline, and where you need the most help. Let's make sure you're ready. What do you need?`
+        : `Hey! I'm ${mentorName} — your interview prep coach. I know your target role, your weak areas, your timeline, and your crash course plan. Let's make sure you're ready. What do you need?`
       : `Hey! I'm ${mentorName} — your learning strategist. I know your Prongs, your pillars, your plan, and where you're headed. Think of me as a thinking partner who asks before they act. What's on your mind?`;
 
   return (
