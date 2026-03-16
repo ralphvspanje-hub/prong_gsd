@@ -525,7 +525,7 @@ const Mentor = () => {
                               <div
                                 className={`rounded-lg px-4 py-3 text-sm leading-relaxed ${
                                   msg.role === "user"
-                                    ? "bg-accent text-accent-foreground"
+                                    ? "bg-accent text-accent-foreground whitespace-pre-wrap"
                                     : "bg-card text-card-foreground border border-border"
                                 }`}
                               >

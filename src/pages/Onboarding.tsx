@@ -409,7 +409,7 @@ const Onboarding = () => {
                       <div
                         className={`max-w-[85%] rounded-lg px-4 py-3 text-base leading-relaxed ${
                           msg.role === "user"
-                            ? "bg-primary text-primary-foreground"
+                            ? "bg-primary text-primary-foreground whitespace-pre-wrap"
                             : "bg-card text-card-foreground border border-border"
                         }`}
                       >
