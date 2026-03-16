@@ -686,6 +686,7 @@ TASK RULES:
 - For conceptual, theory, or lecture-style tasks, generate YouTube-specific search queries (prefix with "youtube: "). E.g., "youtube: Stanford CS229 introduction to machine learning lecture" or "youtube: Andrej Karpathy LLM explained". Be specific — name known educators, universities, or channels when relevant to the topic.
 - For hands-on practice tasks, keep using platform-specific resources or general search queries.
 - The "why_text" should connect the task to their goals and explain the learning value.
+${pacingProfile === "intensive" ? '- PACING NOTE: Write a short motivational message about their deadline or goal. Focus on urgency and encouragement — reference their target company or role if known. Do NOT mention time budgets or minutes per day. Examples: "Your interview is around the corner — nail this block and you\'ll walk in confident.", "Every rep here is one less surprise in the real interview. Push through."' : "- PACING NOTE: Write a brief note about the learner's pace and what to focus on this week."}
 
 Respond with ONLY valid JSON, no markdown fences, no commentary:
 {
@@ -714,7 +715,7 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       "why_text": "Practicing under pressure reveals gaps before the real interview."
     }
   ],
-  "pacing_note": "Brief pacing context for the learner",
+  "pacing_note": "Brief pacing/motivational note for the learner",
   "completion_criteria": "How to know when this block is done"
 }`;
 
