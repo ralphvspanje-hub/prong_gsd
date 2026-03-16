@@ -5,26 +5,17 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Zap, Upload, FileCheck, Loader2, ArrowRight, Info, RotateCcw } from "lucide-react";
+import {
+  Zap,
+  Upload,
+  FileCheck,
+  Loader2,
+  ArrowRight,
+  Info,
+  RotateCcw,
+} from "lucide-react";
 import { toast } from "sonner";
-
-/** Parse a PDF file into plain text using pdfjs-dist. */
-async function parsePdf(file: File): Promise<string> {
-  const pdfjsLib = await import("pdfjs-dist");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/build/pdf.worker.min.mjs",
-    import.meta.url,
-  ).toString();
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const pages: string[] = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    pages.push(textContent.items.map((item: any) => item.str).join(" "));
-  }
-  return pages.join("\n\n");
-}
+import { parsePdf } from "@/lib/parsePdf";
 
 const ContextUpload = () => {
   const { user, signOut } = useAuth();
@@ -37,12 +28,16 @@ const ContextUpload = () => {
   const [uploadingResume, setUploadingResume] = useState(false);
   const [uploadingLinkedin, setUploadingLinkedin] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const isOwner = user?.email?.toLowerCase() === import.meta.env.VITE_OWNER_EMAIL?.toLowerCase();
+  const isOwner =
+    user?.email?.toLowerCase() ===
+    import.meta.env.VITE_OWNER_EMAIL?.toLowerCase();
 
   const handleAdminReset = async () => {
     if (!window.confirm("Reset all data and start over?")) return;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       await supabase.functions.invoke("gsd-reset-user-data", {
         body: { mode: "full" },
         headers: { Authorization: `Bearer ${session?.access_token}` },
@@ -102,7 +97,9 @@ const ContextUpload = () => {
       toast.success("Plan generated! Redirecting...");
       navigate("/dashboard");
     } catch (err: any) {
-      toast.error("Plan generation failed: " + (err.message || "Unknown error"));
+      toast.error(
+        "Plan generation failed: " + (err.message || "Unknown error"),
+      );
       setGenerating(false);
     }
   };
@@ -125,10 +122,12 @@ const ContextUpload = () => {
     setUploading(true);
     try {
       const text = await parsePdf(file);
-      const { error } = await supabase.from("user_profile").upsert(
-        { user_id: user!.id, [column]: text },
-        { onConflict: "user_id" },
-      );
+      const { error } = await supabase
+        .from("user_profile")
+        .upsert(
+          { user_id: user!.id, [column]: text },
+          { onConflict: "user_id" },
+        );
       if (error) throw error;
       setFileName(file.name);
       toast.success(`${label} uploaded and parsed.`);
@@ -141,14 +140,26 @@ const ContextUpload = () => {
   const handleResumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    handleFileUpload(file, "resume_text", setUploadingResume, setResumeFile, "Resume");
+    handleFileUpload(
+      file,
+      "resume_text",
+      setUploadingResume,
+      setResumeFile,
+      "Resume",
+    );
     if (resumeInputRef.current) resumeInputRef.current.value = "";
   };
 
   const handleLinkedinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    handleFileUpload(file, "linkedin_context", setUploadingLinkedin, setLinkedinFile, "LinkedIn profile");
+    handleFileUpload(
+      file,
+      "linkedin_context",
+      setUploadingLinkedin,
+      setLinkedinFile,
+      "LinkedIn profile",
+    );
     if (linkedinInputRef.current) linkedinInputRef.current.value = "";
   };
 
@@ -164,11 +175,18 @@ const ContextUpload = () => {
           </div>
           <div className="flex items-center gap-3">
             {isOwner && (
-              <button onClick={handleAdminReset} className="text-xs text-muted-foreground hover:text-destructive transition-colors" title="Reset all data">
+              <button
+                onClick={handleAdminReset}
+                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                title="Reset all data"
+              >
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>
             )}
-            <button onClick={signOut} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <button
+              onClick={signOut}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
               Sign out
             </button>
           </div>
@@ -214,9 +232,14 @@ const ContextUpload = () => {
                 disabled={uploadingResume}
               >
                 {uploadingResume ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Parsing...</>
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Parsing...
+                  </>
                 ) : (
-                  <><Upload className="h-4 w-4" /> {resumeFile ? "Replace resume" : "Upload resume"}</>
+                  <>
+                    <Upload className="h-4 w-4" />{" "}
+                    {resumeFile ? "Replace resume" : "Upload resume"}
+                  </>
                 )}
               </Button>
             </CardContent>
@@ -226,7 +249,9 @@ const ContextUpload = () => {
           <Card className="border-border">
             <CardContent className="pt-5 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-base font-medium">LinkedIn Profile (PDF)</span>
+                <span className="text-base font-medium">
+                  LinkedIn Profile (PDF)
+                </span>
                 {linkedinFile && (
                   <span className="flex items-center gap-1 text-sm text-green-500">
                     <FileCheck className="h-3.5 w-3.5" />
@@ -248,9 +273,16 @@ const ContextUpload = () => {
                 disabled={uploadingLinkedin}
               >
                 {uploadingLinkedin ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Parsing...</>
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Parsing...
+                  </>
                 ) : (
-                  <><Upload className="h-4 w-4" /> {linkedinFile ? "Replace LinkedIn PDF" : "Upload LinkedIn PDF"}</>
+                  <>
+                    <Upload className="h-4 w-4" />{" "}
+                    {linkedinFile
+                      ? "Replace LinkedIn PDF"
+                      : "Upload LinkedIn PDF"}
+                  </>
                 )}
               </Button>
 
@@ -258,11 +290,18 @@ const ContextUpload = () => {
               <div className="flex gap-2 p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
                 <Info className="h-4 w-4 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-medium text-foreground mb-1">How to export your LinkedIn profile:</p>
+                  <p className="font-medium text-foreground mb-1">
+                    How to export your LinkedIn profile:
+                  </p>
                   <ol className="list-decimal pl-4 space-y-0.5">
                     <li>Go to your own LinkedIn profile page</li>
-                    <li>Click the <strong>"Resources"</strong> button in the top header (where your name is)</li>
-                    <li>Click <strong>"Save to PDF"</strong></li>
+                    <li>
+                      Click the <strong>"Resources"</strong> button in the top
+                      header (where your name is)
+                    </li>
+                    <li>
+                      Click <strong>"Save to PDF"</strong>
+                    </li>
                   </ol>
                 </div>
               </div>
@@ -279,9 +318,15 @@ const ContextUpload = () => {
                   disabled={isUploading || generating}
                 >
                   {generating ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /> Building your plan...</>
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" /> Building your
+                      plan...
+                    </>
                   ) : (
-                    <><Zap className="h-4 w-4" /> Generate Plan from Existing Pillars</>
+                    <>
+                      <Zap className="h-4 w-4" /> Generate Plan from Existing
+                      Pillars
+                    </>
                   )}
                 </Button>
                 <div className="text-center">

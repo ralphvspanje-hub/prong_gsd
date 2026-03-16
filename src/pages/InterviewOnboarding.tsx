@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { parsePdf } from "@/lib/parsePdf";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -23,11 +25,15 @@ import {
 import {
   Send,
   Loader2,
-  Zap,
   Check,
   Target,
   Clock,
   AlertTriangle,
+  Upload,
+  FileCheck,
+  FileText,
+  Info,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -66,22 +72,152 @@ const TEXTAREA_BASE =
 const InterviewOnboarding = () => {
   const { user, session, signOut, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+
+  // Phase flow: context → chat → review
+  const [phase, setPhase] = useState<"context" | "chat" | "review">("context");
+
+  // Chat state
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [phase, setPhase] = useState<"chat" | "review">("chat");
   const [outputs, setOutputs] = useState<InterviewPrepOutputs | null>(null);
   const [saving, setSaving] = useState(false);
   const [savingMessage, setSavingMessage] = useState(
     "Setting up your prep plan...",
   );
-  // Editable company context on review screen
+
+  // Review phase: editable company context
   const [companyName, setCompanyName] = useState("");
   const [companyContext, setCompanyContext] = useState("");
   const [jobDescription, setJobDescription] = useState("");
+
+  // Context phase state
+  const [contextJobDescription, setContextJobDescription] = useState("");
+  const [resumeFileName, setResumeFileName] = useState<string | null>(null);
+  const [linkedinFileName, setLinkedinFileName] = useState<string | null>(null);
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const [uploadingLinkedin, setUploadingLinkedin] = useState(false);
+  const [savingContext, setSavingContext] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const resumeInputRef = useRef<HTMLInputElement>(null);
+  const linkedinInputRef = useRef<HTMLInputElement>(null);
   const startedRef = useRef(false);
+
+  // Fetch existing profile to show indicators
+  const { data: existingProfile } = useQuery({
+    queryKey: ["interview-context-profile", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("user_profile")
+        .select("resume_text, linkedin_context, interview_company_context")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Set indicators from existing profile
+  useEffect(() => {
+    if (!existingProfile) return;
+    if (existingProfile.resume_text)
+      setResumeFileName("Resume already on file");
+    if (existingProfile.linkedin_context)
+      setLinkedinFileName("LinkedIn already on file");
+    if (existingProfile.interview_company_context && !contextJobDescription) {
+      setContextJobDescription(existingProfile.interview_company_context);
+    }
+  }, [existingProfile]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // ---- Context phase handlers ----
+
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      toast.error("Please upload a PDF file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File too large. Max 5 MB.");
+      return;
+    }
+    setUploadingResume(true);
+    try {
+      const text = await parsePdf(file);
+      const { error } = await supabase
+        .from("user_profile")
+        .upsert(
+          { user_id: user!.id, resume_text: text },
+          { onConflict: "user_id" },
+        );
+      if (error) throw error;
+      setResumeFileName(file.name);
+      toast.success("Resume uploaded and parsed.");
+    } catch (err: any) {
+      toast.error("Failed to process resume: " + err.message);
+    }
+    setUploadingResume(false);
+    if (resumeInputRef.current) resumeInputRef.current.value = "";
+  };
+
+  const handleLinkedinUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      toast.error("Please upload a PDF file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File too large. Max 5 MB.");
+      return;
+    }
+    setUploadingLinkedin(true);
+    try {
+      const text = await parsePdf(file);
+      const { error } = await supabase
+        .from("user_profile")
+        .upsert(
+          { user_id: user!.id, linkedin_context: text },
+          { onConflict: "user_id" },
+        );
+      if (error) throw error;
+      setLinkedinFileName(file.name);
+      toast.success("LinkedIn profile uploaded and parsed.");
+    } catch (err: any) {
+      toast.error("Failed to process LinkedIn PDF: " + err.message);
+    }
+    setUploadingLinkedin(false);
+    if (linkedinInputRef.current) linkedinInputRef.current.value = "";
+  };
+
+  const handleContextContinue = async () => {
+    setSavingContext(true);
+    if (contextJobDescription.trim()) {
+      await supabase
+        .from("user_profile")
+        .upsert(
+          {
+            user_id: user!.id,
+            interview_company_context: contextJobDescription.trim(),
+          },
+          { onConflict: "user_id" },
+        );
+    }
+    setPhase("chat");
+    startConversation();
+    setSavingContext(false);
+  };
+
+  // ---- Chat phase handlers ----
 
   const handleTextareaInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
     const el = e.currentTarget;
@@ -96,25 +232,12 @@ const InterviewOnboarding = () => {
     }
   };
 
-  useEffect(() => {
-    if (!authLoading && session && !startedRef.current) {
-      startedRef.current = true;
-      startConversation();
-    }
-  }, [authLoading, session]);
-
-  useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
   const startConversation = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke(
         "gsd-interview-onboarding",
-        {
-          body: { messages: [], action: "start" },
-        },
+        { body: { messages: [], action: "start" } },
       );
       if (error) {
         let msg = error.message;
@@ -152,9 +275,7 @@ const InterviewOnboarding = () => {
     try {
       const { data, error } = await supabase.functions.invoke(
         "gsd-interview-onboarding",
-        {
-          body: { messages: newMessages, action: "continue" },
-        },
+        { body: { messages: newMessages, action: "continue" } },
       );
       if (error) {
         let msg = error.message;
@@ -169,6 +290,7 @@ const InterviewOnboarding = () => {
         setOutputs(data.outputs);
         setCompanyName(data.outputs.company || "");
         setCompanyContext(data.outputs.company_context || "");
+        setJobDescription(contextJobDescription); // Pre-populate from context phase
         setPhase("review");
         setMessages([
           ...newMessages,
@@ -190,11 +312,12 @@ const InterviewOnboarding = () => {
     inputRef.current?.focus();
   };
 
+  // ---- Review phase handler ----
+
   const handleConfirm = async () => {
     if (!outputs || !user) return;
     setSaving(true);
     try {
-      // Save interview context to user_profile
       const interviewData: Record<string, any> = {
         user_id: user.id,
         interview_target_role: outputs.target_role,
@@ -208,13 +331,9 @@ const InterviewOnboarding = () => {
         interview_weak_areas: outputs.weak_areas,
         interview_format: outputs.interview_format,
       };
-
-      // Also ensure basic profile fields exist
       interviewData.name = user.email?.split("@")[0] || "Learner";
-
       await supabase.from("user_profile").upsert(interviewData);
 
-      // Create interview-specific pillars
       const pillarIds: string[] = [];
       for (let i = 0; i < outputs.interview_pillars.length; i++) {
         const p = outputs.interview_pillars[i];
@@ -227,14 +346,13 @@ const InterviewOnboarding = () => {
             why_it_matters: `Interview prep focus: ${p.focus_areas.join(", ")}`,
             starting_level: p.starting_level,
             current_level: p.starting_level,
-            sort_order: 100 + i, // High sort_order to avoid collision with main pillars
+            sort_order: 100 + i,
           })
           .select()
           .single();
 
         if (pillarData) {
           pillarIds.push(pillarData.id);
-          // Create topic clusters from focus_areas
           await supabase.from("topic_map").insert({
             pillar_id: pillarData.id,
             cluster_name: `${p.name} — Core Topics`,
@@ -245,13 +363,10 @@ const InterviewOnboarding = () => {
         }
       }
 
-      // Generate the interview prep plan
       setSavingMessage("Building your crash course...");
       const { error: planError } = await supabase.functions.invoke(
         "gsd-generate-plan",
-        {
-          body: { mode: "interview_plan" },
-        },
+        { body: { mode: "interview_plan" } },
       );
 
       if (planError) {
@@ -263,9 +378,7 @@ const InterviewOnboarding = () => {
         return;
       }
 
-      // Set dashboard to interview prep view
       localStorage.setItem("pronggsd-dashboard-view", "interview_prep");
-
       toast.success("Interview prep is ready! Let's crush this.");
       navigate("/dashboard");
     } catch (err: any) {
@@ -312,6 +425,171 @@ const InterviewOnboarding = () => {
       </header>
 
       <div className="flex-1 container max-w-2xl py-6">
+        {/* =============== CONTEXT PHASE =============== */}
+        {phase === "context" && (
+          <div className="space-y-6">
+            <div className="text-center space-y-2">
+              <h1 className="font-serif text-3xl font-bold">
+                Prepare Your Context
+              </h1>
+              <p className="text-muted-foreground">
+                Help your prep coach build a targeted plan. All fields are
+                optional.
+              </p>
+            </div>
+
+            {/* Job Description — prominent */}
+            <Card className="border-orange-500/30 bg-orange-500/5">
+              <CardContent className="pt-6 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="context-jd" className="text-base font-medium">
+                    Job Description
+                  </Label>
+                  <Badge
+                    variant="secondary"
+                    className="bg-orange-500/10 text-orange-600 dark:text-orange-400 text-xs"
+                  >
+                    Recommended
+                  </Badge>
+                </div>
+                <Textarea
+                  id="context-jd"
+                  placeholder="Paste the full job description here..."
+                  value={contextJobDescription}
+                  onChange={(e) => setContextJobDescription(e.target.value)}
+                  rows={6}
+                  className="focus-visible:ring-orange-500/50"
+                />
+                <p className="text-xs text-muted-foreground">
+                  The more detail you provide, the more targeted your crash
+                  course will be.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Resume + LinkedIn uploads */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {/* Resume */}
+              <Card className="border-border">
+                <CardContent className="pt-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Resume (PDF)</span>
+                    {resumeFileName && (
+                      <span className="flex items-center gap-1 text-xs text-green-500">
+                        <FileCheck className="h-3 w-3" />
+                        {resumeFileName}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    ref={resumeInputRef}
+                    type="file"
+                    accept=".pdf"
+                    className="hidden"
+                    onChange={handleResumeUpload}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-2"
+                    onClick={() => resumeInputRef.current?.click()}
+                    disabled={uploadingResume}
+                  >
+                    {uploadingResume ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Parsing...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4" />{" "}
+                        {resumeFileName ? "Replace resume" : "Upload resume"}
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* LinkedIn */}
+              <Card className="border-border">
+                <CardContent className="pt-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">LinkedIn (PDF)</span>
+                    {linkedinFileName && (
+                      <span className="flex items-center gap-1 text-xs text-green-500">
+                        <FileCheck className="h-3 w-3" />
+                        {linkedinFileName}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    ref={linkedinInputRef}
+                    type="file"
+                    accept=".pdf"
+                    className="hidden"
+                    onChange={handleLinkedinUpload}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-2"
+                    onClick={() => linkedinInputRef.current?.click()}
+                    disabled={uploadingLinkedin}
+                  >
+                    {uploadingLinkedin ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Parsing...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4" />{" "}
+                        {linkedinFileName
+                          ? "Replace LinkedIn PDF"
+                          : "Upload LinkedIn PDF"}
+                      </>
+                    )}
+                  </Button>
+                  <div className="flex gap-2 p-2 rounded-lg bg-muted/50 text-xs text-muted-foreground">
+                    <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>
+                      LinkedIn → your profile → Resources → Save to PDF
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col items-center gap-3 pt-2">
+              <Button
+                onClick={handleContextContinue}
+                disabled={savingContext || uploadingResume || uploadingLinkedin}
+                className="gap-2 bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                {savingContext ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Saving...
+                  </>
+                ) : (
+                  <>
+                    <ArrowRight className="h-4 w-4" /> Continue to Chat
+                  </>
+                )}
+              </Button>
+              <button
+                onClick={() => {
+                  setPhase("chat");
+                  startConversation();
+                }}
+                disabled={savingContext}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Skip — start chatting
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* =============== CHAT PHASE =============== */}
         {phase === "chat" && (
           <div className="flex flex-col h-[calc(100vh-10rem)]">
             <ScrollArea className="flex-1 pr-4">
@@ -446,6 +724,7 @@ const InterviewOnboarding = () => {
           </div>
         )}
 
+        {/* =============== REVIEW PHASE =============== */}
         {phase === "review" && outputs && (
           <div className="space-y-8">
             <div className="text-center space-y-2">
@@ -543,9 +822,7 @@ const InterviewOnboarding = () => {
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="job-description">
-                    Job Description (optional)
-                  </Label>
+                  <Label htmlFor="job-description">Job Description</Label>
                   <Textarea
                     id="job-description"
                     placeholder="Paste the job description or key requirements here to tailor your prep..."
@@ -633,13 +910,11 @@ const InterviewOnboarding = () => {
               >
                 {saving ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {savingMessage}
+                    <Loader2 className="h-4 w-4 animate-spin" /> {savingMessage}
                   </>
                 ) : (
                   <>
-                    <Check className="h-4 w-4" />
-                    Start Crash Course
+                    <Check className="h-4 w-4" /> Start Crash Course
                   </>
                 )}
               </Button>

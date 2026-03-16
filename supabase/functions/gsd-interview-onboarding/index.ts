@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
     });
 
     const { data: userData, error: userError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
+      authHeader.replace("Bearer ", ""),
     );
     if (userError || !userData?.user) {
       return jsonRes({ error: "Unauthorized" }, 401);
@@ -133,7 +133,12 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     const ip = req.headers.get("x-forwarded-for") || "unknown";
-    const rateCheck = await checkRateLimit(supabaseAdmin, userId, ip, "interview-onboarding");
+    const rateCheck = await checkRateLimit(
+      supabaseAdmin,
+      userId,
+      ip,
+      "interview-onboarding",
+    );
     if (!rateCheck.allowed) {
       return jsonRes({ error: rateCheck.message }, 429);
     }
@@ -141,7 +146,10 @@ Deno.serve(async (req) => {
     const { action, messages } = await req.json();
 
     if (!["start", "continue"].includes(action)) {
-      return jsonRes({ error: "Invalid action. Must be: start, continue" }, 400);
+      return jsonRes(
+        { error: "Invalid action. Must be: start, continue" },
+        400,
+      );
     }
 
     if (action === "continue" && (!messages || messages.length === 0)) {
@@ -161,11 +169,13 @@ Deno.serve(async (req) => {
     // Fetch resume/LinkedIn context if available
     const { data: profile } = await supabase
       .from("user_profile")
-      .select("resume_text, linkedin_context")
+      .select("resume_text, linkedin_context, interview_company_context")
       .eq("user_id", userId)
       .maybeSingle();
 
-    const turnCount = (messages || []).filter((m: any) => m.role === "user").length;
+    const turnCount = (messages || []).filter(
+      (m: any) => m.role === "user",
+    ).length;
     let systemPrompt = INTERVIEW_ONBOARDING_SYSTEM_PROMPT;
     const todayStr = new Date().toISOString().split("T")[0];
     systemPrompt += `\n\nToday's date is ${todayStr}. Use this to calculate interview_date from relative references like "2 weeks from now".`;
@@ -176,9 +186,13 @@ Deno.serve(async (req) => {
     if (profile?.linkedin_context) {
       systemPrompt += `\n\nLINKEDIN CONTEXT (use to understand their experience level):\n${profile.linkedin_context.slice(0, 3000)}`;
     }
+    if (profile?.interview_company_context) {
+      systemPrompt += `\n\nJOB DESCRIPTION / COMPANY CONTEXT (use this to tailor your pillar recommendations and interview prep strategy):\n${profile.interview_company_context.slice(0, 4000)}`;
+    }
 
     if (turnCount >= 5) {
-      systemPrompt += "\n\nIMPORTANT: The conversation has gone on long enough. Wrap up and produce the [INTERVIEW_PREP_COMPLETE] output now.";
+      systemPrompt +=
+        "\n\nIMPORTANT: The conversation has gone on long enough. Wrap up and produce the [INTERVIEW_PREP_COMPLETE] output now.";
     }
 
     const contents: { role: string; parts: { text: string }[] }[] = [];
@@ -210,37 +224,52 @@ Deno.serve(async (req) => {
           contents,
           generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
         }),
-      }
+      },
     );
 
     if (!aiResponse.ok) {
       if (aiResponse.status === 429) {
-        return jsonRes({ error: "The AI service is temporarily unavailable due to high demand. Please try again in a few minutes." }, 429);
+        return jsonRes(
+          {
+            error:
+              "The AI service is temporarily unavailable due to high demand. Please try again in a few minutes.",
+          },
+          429,
+        );
       }
       const errText = await aiResponse.text();
       throw new Error(`AI API error: ${aiResponse.status} ${errText}`);
     }
 
     const aiData = await aiResponse.json();
-    const fullContent: string = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const fullContent: string =
+      aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     const completeMatch = fullContent.match(
-      /\[INTERVIEW_PREP_COMPLETE\]\s*([\s\S]*?)\s*\[\/INTERVIEW_PREP_COMPLETE\]/
+      /\[INTERVIEW_PREP_COMPLETE\]\s*([\s\S]*?)\s*\[\/INTERVIEW_PREP_COMPLETE\]/,
     );
 
     // Server-side guard: strip premature completion if under minimum turns
     if (completeMatch && turnCount < MIN_USER_TURNS) {
       const strippedContent = fullContent
-        .replace(/\[INTERVIEW_PREP_COMPLETE\][\s\S]*?\[\/INTERVIEW_PREP_COMPLETE\]/, "")
+        .replace(
+          /\[INTERVIEW_PREP_COMPLETE\][\s\S]*?\[\/INTERVIEW_PREP_COMPLETE\]/,
+          "",
+        )
         .trim();
       return jsonRes({
-        message: strippedContent || "I need a bit more info before building your prep plan. Let's keep going!",
+        message:
+          strippedContent ||
+          "I need a bit more info before building your prep plan. Let's keep going!",
       });
     }
 
     if (completeMatch) {
       const messageBeforeBlock = fullContent
-        .replace(/\[INTERVIEW_PREP_COMPLETE\][\s\S]*?\[\/INTERVIEW_PREP_COMPLETE\]/, "")
+        .replace(
+          /\[INTERVIEW_PREP_COMPLETE\][\s\S]*?\[\/INTERVIEW_PREP_COMPLETE\]/,
+          "",
+        )
         .trim();
 
       try {

@@ -9,12 +9,49 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Loader2, Save, AlertTriangle, Trash2, Minus, Plus, RotateCcw, Rewind, UserX, Upload, FileText, Link, Target } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Loader2,
+  Save,
+  AlertTriangle,
+  Trash2,
+  Minus,
+  Plus,
+  RotateCcw,
+  Rewind,
+  UserX,
+  Upload,
+  FileText,
+  Link,
+  Target,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { parsePdf } from "@/lib/parsePdf";
 
 const SettingsPage = () => {
   const { user } = useAuth();
@@ -38,7 +75,11 @@ const SettingsPage = () => {
   const { data: fetchedProfile, isLoading: profileLoading } = useQuery({
     queryKey: ["user_profile", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("user_profile").select("*").eq("user_id", user!.id).maybeSingle();
+      const { data } = await supabase
+        .from("user_profile")
+        .select("*")
+        .eq("user_id", user!.id)
+        .maybeSingle();
       return data;
     },
     enabled: !isDemo && !!user,
@@ -48,7 +89,11 @@ const SettingsPage = () => {
   const { data: pillars = [], isLoading: pillarsLoading } = useQuery({
     queryKey: ["pillars", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("pillars").select("*").eq("user_id", user!.id).order("sort_order");
+      const { data } = await supabase
+        .from("pillars")
+        .select("*")
+        .eq("user_id", user!.id)
+        .order("sort_order");
       return data || [];
     },
     enabled: !isDemo && !!user,
@@ -61,7 +106,8 @@ const SettingsPage = () => {
     if (fetchedProfile) {
       setProfile(fetchedProfile);
       setLocalMentorName((fetchedProfile as any)?.mentor_name || "");
-      if (fetchedProfile.linkedin_context) setLinkedinFileName("LinkedIn uploaded");
+      if (fetchedProfile.linkedin_context)
+        setLinkedinFileName("LinkedIn uploaded");
       if (fetchedProfile.resume_text) setResumeFileName("Resume uploaded");
     }
   }, [fetchedProfile]);
@@ -74,7 +120,10 @@ const SettingsPage = () => {
   }, [isDemo]);
 
   const saveProfile = async () => {
-    if (isDemo) { toast.success("Settings saved! (Demo mode)"); return; }
+    if (isDemo) {
+      toast.success("Settings saved! (Demo mode)");
+      return;
+    }
     if (!profile) return;
     setSaving(true);
     const { error } = await supabase
@@ -94,7 +143,10 @@ const SettingsPage = () => {
   };
 
   const saveMentorName = async () => {
-    if (isDemo) { toast.success("Mentor name saved! (Demo mode)"); return; }
+    if (isDemo) {
+      toast.success("Mentor name saved! (Demo mode)");
+      return;
+    }
     setSavingMentor(true);
     const nameToSave = localMentorName.trim() || null;
     const { error } = await supabase
@@ -111,9 +163,15 @@ const SettingsPage = () => {
   };
 
   const updatePillarLevel = async (pillarId: string, newLevel: number) => {
-    if (isDemo) { toast.success("Level updated! (Demo mode)"); return; }
+    if (isDemo) {
+      toast.success("Level updated! (Demo mode)");
+      return;
+    }
     const clamped = Math.max(1, Math.min(5, newLevel));
-    const { error } = await supabase.from("pillars").update({ current_level: clamped }).eq("id", pillarId);
+    const { error } = await supabase
+      .from("pillars")
+      .update({ current_level: clamped })
+      .eq("id", pillarId);
     if (error) toast.error(error.message);
     else {
       queryClient.invalidateQueries({ queryKey: ["pillars", user?.id] });
@@ -122,7 +180,10 @@ const SettingsPage = () => {
   };
 
   const deletePillar = async (pillarId: string, pillarName: string) => {
-    if (isDemo) { toast.success("Pillar deleted! (Demo mode)"); return; }
+    if (isDemo) {
+      toast.success("Pillar deleted! (Demo mode)");
+      return;
+    }
     try {
       await supabase.from("topic_map").delete().eq("pillar_id", pillarId);
       await supabase.from("phase_weights").delete().eq("pillar_id", pillarId);
@@ -134,7 +195,9 @@ const SettingsPage = () => {
     }
   };
 
-  const handleLinkedinUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLinkedinUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.type !== "application/pdf") {
@@ -145,23 +208,13 @@ const SettingsPage = () => {
       toast.error("File too large. Max 5 MB.");
       return;
     }
-    if (isDemo) { toast.success("LinkedIn uploaded! (Demo mode)"); return; }
+    if (isDemo) {
+      toast.success("LinkedIn uploaded! (Demo mode)");
+      return;
+    }
     setSavingLinkedin(true);
     try {
-      const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-        "pdfjs-dist/build/pdf.worker.min.mjs",
-        import.meta.url,
-      ).toString();
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const pages: string[] = [];
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        pages.push(textContent.items.map((item: any) => item.str).join(" "));
-      }
-      const linkedinText = pages.join("\n\n");
+      const linkedinText = await parsePdf(file);
       const { error } = await supabase
         .from("user_profile")
         .update({ linkedin_context: linkedinText })
@@ -188,23 +241,13 @@ const SettingsPage = () => {
       toast.error("File too large. Max 5 MB.");
       return;
     }
-    if (isDemo) { toast.success("Resume uploaded! (Demo mode)"); return; }
+    if (isDemo) {
+      toast.success("Resume uploaded! (Demo mode)");
+      return;
+    }
     setSavingResume(true);
     try {
-      const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-        "pdfjs-dist/build/pdf.worker.min.mjs",
-        import.meta.url,
-      ).toString();
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const pages: string[] = [];
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        pages.push(textContent.items.map((item: any) => item.str).join(" "));
-      }
-      const resumeText = pages.join("\n\n");
+      const resumeText = await parsePdf(file);
       const { error } = await supabase
         .from("user_profile")
         .update({ resume_text: resumeText })
@@ -222,10 +265,15 @@ const SettingsPage = () => {
   };
 
   const resetAllData = async () => {
-    if (isDemo) { toast.success("Data reset! (Demo mode)"); return; }
+    if (isDemo) {
+      toast.success("Data reset! (Demo mode)");
+      return;
+    }
     setResetting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const { error } = await supabase.functions.invoke("gsd-reset-user-data", {
         body: { mode: "full" },
         headers: { Authorization: `Bearer ${session?.access_token}` },
@@ -240,10 +288,15 @@ const SettingsPage = () => {
   };
 
   const rewindData = async () => {
-    if (isDemo) { toast.success("Data rewound! (Demo mode)"); return; }
+    if (isDemo) {
+      toast.success("Data rewound! (Demo mode)");
+      return;
+    }
     setResetting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const { error } = await supabase.functions.invoke("gsd-reset-user-data", {
         body: { mode: "rewind" },
         headers: { Authorization: `Bearer ${session?.access_token}` },
@@ -258,10 +311,15 @@ const SettingsPage = () => {
   };
 
   const deleteAccount = async () => {
-    if (isDemo) { toast.success("Account deleted! (Demo mode)"); return; }
+    if (isDemo) {
+      toast.success("Account deleted! (Demo mode)");
+      return;
+    }
     setResetting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const { error } = await supabase.functions.invoke("gsd-reset-user-data", {
         body: { mode: "delete_account" },
         headers: { Authorization: `Bearer ${session?.access_token}` },
@@ -271,7 +329,9 @@ const SettingsPage = () => {
       await supabase.auth.signOut();
       window.location.href = "/auth";
     } catch (err: any) {
-      toast.error("Failed to delete account: " + (err.message || "Unknown error"));
+      toast.error(
+        "Failed to delete account: " + (err.message || "Unknown error"),
+      );
       setResetting(false);
     }
   };
@@ -295,7 +355,10 @@ const SettingsPage = () => {
         <Card className="border-border">
           <CardHeader>
             <CardTitle className="font-serif text-lg">Your Mentor</CardTitle>
-            <CardDescription>This is what your AI mentor will be called throughout the app. Leave blank to use the default.</CardDescription>
+            <CardDescription>
+              This is what your AI mentor will be called throughout the app.
+              Leave blank to use the default.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-2">
@@ -306,8 +369,17 @@ const SettingsPage = () => {
                 placeholder="Mentor"
               />
             </div>
-            <Button onClick={saveMentorName} disabled={savingMentor} size="sm" className="gap-2">
-              {savingMentor ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            <Button
+              onClick={saveMentorName}
+              disabled={savingMentor}
+              size="sm"
+              className="gap-2"
+            >
+              {savingMentor ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
               Save
             </Button>
           </CardContent>
@@ -316,14 +388,25 @@ const SettingsPage = () => {
         {/* Learning Preferences */}
         <Card className="border-border">
           <CardHeader>
-            <CardTitle className="font-serif text-lg">Learning Preferences</CardTitle>
-            <CardDescription>Adjust your daily time commitment and learning pace.</CardDescription>
+            <CardTitle className="font-serif text-lg">
+              Learning Preferences
+            </CardTitle>
+            <CardDescription>
+              Adjust your daily time commitment and learning pace.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Daily Time (minutes)</Label>
-              <Select value={String(profile?.daily_time_commitment || 15)} onValueChange={(v) => setProfile({ ...profile, daily_time_commitment: parseInt(v) })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select
+                value={String(profile?.daily_time_commitment || 15)}
+                onValueChange={(v) =>
+                  setProfile({ ...profile, daily_time_commitment: parseInt(v) })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="5">5 minutes</SelectItem>
                   <SelectItem value="10">10 minutes</SelectItem>
@@ -336,19 +419,35 @@ const SettingsPage = () => {
             </div>
             <div className="space-y-2">
               <Label>Learning Cadence</Label>
-              <Select value={profile?.learning_cadence || "daily"} onValueChange={(v) => setProfile({ ...profile, learning_cadence: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select
+                value={profile?.learning_cadence || "daily"}
+                onValueChange={(v) =>
+                  setProfile({ ...profile, learning_cadence: v })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="daily">Daily</SelectItem>
                   <SelectItem value="weekdays">Weekdays Only</SelectItem>
-                  <SelectItem value="every_other_day">Every Other Day</SelectItem>
+                  <SelectItem value="every_other_day">
+                    Every Other Day
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <Label>Cycle Length (sections)</Label>
-              <Select value={String(profile?.cycle_length || 5)} onValueChange={(v) => setProfile({ ...profile, cycle_length: parseInt(v) })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select
+                value={String(profile?.cycle_length || 5)}
+                onValueChange={(v) =>
+                  setProfile({ ...profile, cycle_length: parseInt(v) })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="3">3 sections</SelectItem>
                   <SelectItem value="5">5 sections</SelectItem>
@@ -357,7 +456,11 @@ const SettingsPage = () => {
               </Select>
             </div>
             <Button onClick={saveProfile} disabled={saving} className="gap-2">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
               Save
             </Button>
           </CardContent>
@@ -367,14 +470,22 @@ const SettingsPage = () => {
         <Card className="border-border">
           <CardHeader>
             <CardTitle className="font-serif text-lg">Pillars</CardTitle>
-            <CardDescription>Your strategic knowledge domains. To add, swap, or edit pillars, talk to your {mentorName}.</CardDescription>
+            <CardDescription>
+              Your strategic knowledge domains. To add, swap, or edit pillars,
+              talk to your {mentorName}.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {pillars.map((p) => (
-              <div key={p.id} className="flex items-center justify-between py-2 border-b border-border last:border-0 gap-3">
+              <div
+                key={p.id}
+                className="flex items-center justify-between py-2 border-b border-border last:border-0 gap-3"
+              >
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{p.name}</p>
-                  <p className="text-xs text-muted-foreground">{p.is_active ? "Active" : "Inactive"}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {p.is_active ? "Active" : "Inactive"}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="flex items-center gap-1">
@@ -382,17 +493,23 @@ const SettingsPage = () => {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7"
-                      onClick={() => updatePillarLevel(p.id, p.current_level - 1)}
+                      onClick={() =>
+                        updatePillarLevel(p.id, p.current_level - 1)
+                      }
                       disabled={p.current_level <= 1}
                     >
                       <Minus className="h-3 w-3" />
                     </Button>
-                    <span className="text-sm font-mono w-8 text-center">{p.current_level}/5</span>
+                    <span className="text-sm font-mono w-8 text-center">
+                      {p.current_level}/5
+                    </span>
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7"
-                      onClick={() => updatePillarLevel(p.id, p.current_level + 1)}
+                      onClick={() =>
+                        updatePillarLevel(p.id, p.current_level + 1)
+                      }
                       disabled={p.current_level >= 5}
                     >
                       <Plus className="h-3 w-3" />
@@ -400,18 +517,28 @@ const SettingsPage = () => {
                   </div>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                      >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Delete {p.name}?</AlertDialogTitle>
-                        <AlertDialogDescription>This cannot be undone. All topic map entries and phase weights for this pillar will also be removed.</AlertDialogDescription>
+                        <AlertDialogDescription>
+                          This cannot be undone. All topic map entries and phase
+                          weights for this pillar will also be removed.
+                        </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => deletePillar(p.id, p.name)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        <AlertDialogAction
+                          onClick={() => deletePillar(p.id, p.name)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
                           Delete
                         </AlertDialogAction>
                       </AlertDialogFooter>
@@ -431,7 +558,9 @@ const SettingsPage = () => {
               Connect Your Context
             </CardTitle>
             <CardDescription>
-              Adding your LinkedIn profile and resume helps ProngGSD create better learning plans tailored to your real background and experience. Both are completely optional.
+              Adding your LinkedIn profile and resume helps ProngGSD create
+              better learning plans tailored to your real background and
+              experience. Both are completely optional.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -452,7 +581,11 @@ const SettingsPage = () => {
                   disabled={savingLinkedin}
                   className="gap-2"
                 >
-                  {savingLinkedin ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {savingLinkedin ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
                   Upload PDF
                 </Button>
                 {linkedinFileName && (
@@ -463,7 +596,8 @@ const SettingsPage = () => {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                Upload your LinkedIn profile as PDF (max 5 MB). To export: go to your LinkedIn profile → click "Resources" → "Save to PDF".
+                Upload your LinkedIn profile as PDF (max 5 MB). To export: go to
+                your LinkedIn profile → click "Resources" → "Save to PDF".
               </p>
             </div>
             <div className="space-y-2">
@@ -483,7 +617,11 @@ const SettingsPage = () => {
                   disabled={savingResume}
                   className="gap-2"
                 >
-                  {savingResume ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {savingResume ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
                   Upload PDF
                 </Button>
                 {resumeFileName && (
@@ -494,7 +632,8 @@ const SettingsPage = () => {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                Upload your resume (PDF, max 5 MB). We'll extract the text to better understand your background.
+                Upload your resume (PDF, max 5 MB). We'll extract the text to
+                better understand your background.
               </p>
             </div>
           </CardContent>
@@ -508,7 +647,8 @@ const SettingsPage = () => {
               Interview Prep
             </CardTitle>
             <CardDescription>
-              Set up an intensive crash course for an upcoming interview. This runs alongside your main learning plan.
+              Set up an intensive crash course for an upcoming interview. This
+              runs alongside your main learning plan.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -529,14 +669,25 @@ const SettingsPage = () => {
               <AlertTriangle className="h-4 w-4 text-destructive" />
               Danger Zone
             </CardTitle>
-            <CardDescription>Want to tweak your pillars or goals? Talk to your {mentorName} instead.</CardDescription>
+            <CardDescription>
+              Want to tweak your pillars or goals? Talk to your {mentorName}{" "}
+              instead.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" disabled={resetting} className="w-full text-destructive hover:text-destructive gap-2">
-                    {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                  <Button
+                    variant="outline"
+                    disabled={resetting}
+                    className="w-full text-destructive hover:text-destructive gap-2"
+                  >
+                    {resetting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-4 w-4" />
+                    )}
                     Reset All Data
                   </Button>
                 </AlertDialogTrigger>
@@ -544,55 +695,83 @@ const SettingsPage = () => {
                   <AlertDialogHeader>
                     <AlertDialogTitle>Reset all data?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will permanently delete all your data and return you to onboarding. This cannot be undone.
+                      This will permanently delete all your data and return you
+                      to onboarding. This cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={resetAllData} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    <AlertDialogAction
+                      onClick={resetAllData}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
                       Reset Everything
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
               <p className="text-xs text-muted-foreground mt-2">
-                Wipe everything — profile, pillars, history, conversations — and start fresh from onboarding.
+                Wipe everything — profile, pillars, history, conversations — and
+                start fresh from onboarding.
               </p>
             </div>
 
             <div>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="outline" disabled={resetting} className="w-full text-destructive hover:text-destructive gap-2">
-                      {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rewind className="h-4 w-4" />}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    disabled={resetting}
+                    className="w-full text-destructive hover:text-destructive gap-2"
+                  >
+                    {resetting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Rewind className="h-4 w-4" />
+                    )}
+                    Rewind
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Rewind learning history?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will wipe your learning history but keep your profile
+                      and pillars. Topic clusters will be reset to queued.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={rewindData}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
                       Rewind
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Rewind learning history?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will wipe your learning history but keep your profile and pillars. Topic clusters will be reset to queued.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={rewindData} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                        Rewind
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Keep your profile and pillars, but wipe cycles, units, mentor conversations, and notes. Topic clusters reset to queued.
-                </p>
-              </div>
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <p className="text-xs text-muted-foreground mt-2">
+                Keep your profile and pillars, but wipe cycles, units, mentor
+                conversations, and notes. Topic clusters reset to queued.
+              </p>
+            </div>
 
             <div>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" disabled={resetting} className="w-full text-destructive hover:text-destructive gap-2">
-                    {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserX className="h-4 w-4" />}
+                  <Button
+                    variant="outline"
+                    disabled={resetting}
+                    className="w-full text-destructive hover:text-destructive gap-2"
+                  >
+                    {resetting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <UserX className="h-4 w-4" />
+                    )}
                     Delete Account
                   </Button>
                 </AlertDialogTrigger>
@@ -600,19 +779,24 @@ const SettingsPage = () => {
                   <AlertDialogHeader>
                     <AlertDialogTitle>Delete your account?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will permanently delete your account and all your data. You will be signed out. This cannot be undone.
+                      This will permanently delete your account and all your
+                      data. You will be signed out. This cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={deleteAccount} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    <AlertDialogAction
+                      onClick={deleteAccount}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
                       Delete Account
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
               <p className="text-xs text-muted-foreground mt-2">
-                Permanently delete your account and all data. You will be signed out.
+                Permanently delete your account and all data. You will be signed
+                out.
               </p>
             </div>
           </CardContent>
