@@ -1247,32 +1247,35 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
   if (planErr) throw planErr;
 
   // Generate ALL weeks' blocks immediately (short plan, need full visibility)
-  // Parallelize blocks within each week for speed (~3-4x faster)
+  // Process pillars in chunks of 2 to avoid Gemini RPM rate limits (15 RPM on free tier)
   for (const week of outline.weeks) {
     const activePillarCount = week.pillars.length;
-    const blockPromises = week.pillars.map((wp) =>
-      generateBlock(supabase, supabaseAdmin, geminiApiKey, {
-        userId,
-        planId: plan.id,
-        weekNumber: wp.week_number || week.week_number,
-        pillarId: wp.pillar_id,
-        pillarName: wp.pillar_name,
-        weeklyGoal: wp.weekly_goal,
-        profile,
-        activePillarCount,
-        planType: "interview_prep",
-      }).catch((err: any) => {
-        console.error(
-          `Interview block gen failed for ${wp.pillar_name} week ${week.week_number}:`,
-          err,
-        );
-        warnings.push(
-          `Failed to generate week ${week.week_number} block for "${wp.pillar_name}": ${err.message}`,
-        );
-        return null;
-      }),
-    );
-    await Promise.all(blockPromises);
+    for (let i = 0; i < week.pillars.length; i += 2) {
+      const chunk = week.pillars.slice(i, i + 2);
+      const blockPromises = chunk.map((wp) =>
+        generateBlock(supabase, supabaseAdmin, geminiApiKey, {
+          userId,
+          planId: plan.id,
+          weekNumber: wp.week_number || week.week_number,
+          pillarId: wp.pillar_id,
+          pillarName: wp.pillar_name,
+          weeklyGoal: wp.weekly_goal,
+          profile,
+          activePillarCount,
+          planType: "interview_prep",
+        }).catch((err: any) => {
+          console.error(
+            `Interview block gen failed for ${wp.pillar_name} week ${week.week_number}:`,
+            err,
+          );
+          warnings.push(
+            `Failed to generate week ${week.week_number} block for "${wp.pillar_name}": ${err.message}`,
+          );
+          return null;
+        }),
+      );
+      await Promise.all(blockPromises);
+    }
   }
 
   // Initialize user_progress if it doesn't exist (shared with learning plan)
