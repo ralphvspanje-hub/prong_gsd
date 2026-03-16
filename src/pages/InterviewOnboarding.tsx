@@ -185,16 +185,14 @@ const InterviewOnboarding = () => {
     setUploadingLinkedin(true);
     try {
       const text = await parsePdf(file);
-      const { error } = await supabase
-        .from("user_profile")
-        .upsert(
-          {
-            user_id: user!.id,
-            name: user!.email?.split("@")[0] || "Learner",
-            linkedin_context: text,
-          },
-          { onConflict: "user_id" },
-        );
+      const { error } = await supabase.from("user_profile").upsert(
+        {
+          user_id: user!.id,
+          name: user!.email?.split("@")[0] || "Learner",
+          linkedin_context: text,
+        },
+        { onConflict: "user_id" },
+      );
       if (error) throw error;
       setLinkedinFileName(file.name);
       toast.success("LinkedIn profile uploaded and parsed.");
@@ -207,19 +205,30 @@ const InterviewOnboarding = () => {
 
   const handleContextContinue = async () => {
     setSavingContext(true);
-    if (contextJobDescription.trim()) {
-      await supabase.from("user_profile").upsert(
-        {
-          user_id: user!.id,
-          name: user!.email?.split("@")[0] || "Learner",
-          interview_company_context: contextJobDescription.trim(),
-        },
-        { onConflict: "user_id" },
-      );
+    try {
+      if (contextJobDescription.trim()) {
+        const { error } = await supabase.from("user_profile").upsert(
+          {
+            user_id: user!.id,
+            name: user!.email?.split("@")[0] || "Learner",
+            interview_company_context: contextJobDescription.trim(),
+          },
+          { onConflict: "user_id" },
+        );
+        if (error) {
+          console.error("Failed to save job description:", error);
+          toast.error("Failed to save job description. Trying again...");
+          setSavingContext(false);
+          return;
+        }
+        // Small delay to ensure DB write is committed before edge function reads it
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      setPhase("chat");
+      startConversation();
+    } finally {
+      setSavingContext(false);
     }
-    setPhase("chat");
-    startConversation();
-    setSavingContext(false);
   };
 
   // ---- Chat phase handlers ----
