@@ -317,12 +317,13 @@ const SprintCheckin = () => {
               Choose your next focus (1-2 pillars)
             </h2>
 
-            {suggestedPillars.length > 0 && (
-              <div className="text-sm text-muted-foreground mb-2">
-                AI suggests:{" "}
-                {suggestedPillars.map((p) => p.pillar_name).join(", ")}
-              </div>
-            )}
+            <p className="text-sm text-muted-foreground">
+              Want to add a new pillar or change your plan first?{" "}
+              <a href="/mentor" className="text-accent hover:underline">
+                Talk to your mentor
+              </a>{" "}
+              before picking.
+            </p>
 
             <div className="grid gap-2">
               {(pillars || [])
