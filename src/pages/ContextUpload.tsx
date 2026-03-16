@@ -48,20 +48,24 @@ const ContextUpload = () => {
     }
   };
 
-  // If user already has a plan, skip straight to dashboard
-  const { data: hasPlan, isLoading } = useQuery({
+  // If user already has a plan, skip straight to the right dashboard
+  const { data: activePlans, isLoading } = useQuery({
     queryKey: ["has-plan", user?.id],
     queryFn: async () => {
-      const { count } = await supabase
+      const { data } = await supabase
         .from("learning_plans")
-        .select("*", { count: "exact", head: true })
+        .select("plan_type")
         .eq("user_id", user!.id)
-        .eq("is_active", true)
-        .eq("plan_type", "learning");
-      return (count ?? 0) > 0;
+        .eq("is_active", true);
+      return data || [];
     },
     enabled: !!user?.id,
   });
+
+  const hasLearningPlan = activePlans?.some((p) => p.plan_type === "learning");
+  const hasCrashPlan = activePlans?.some(
+    (p) => p.plan_type === "interview_prep",
+  );
 
   // Check if pillars already exist (post-rewind state — can skip onboarding)
   // NOTE: This hook MUST be before any conditional returns (React hooks rule)
@@ -74,7 +78,7 @@ const ContextUpload = () => {
         .eq("user_id", user!.id);
       return (count ?? 0) > 0;
     },
-    enabled: !!user?.id && !isLoading && !hasPlan,
+    enabled: !!user?.id && !isLoading && !hasLearningPlan,
   });
 
   if (isLoading) {
@@ -85,8 +89,12 @@ const ContextUpload = () => {
     );
   }
 
-  if (hasPlan) {
+  // Redirect to the right dashboard based on which plan exists
+  if (hasLearningPlan) {
     return <Navigate to="/dashboard" replace />;
+  }
+  if (hasCrashPlan) {
+    return <Navigate to="/crash-course" replace />;
   }
 
   const handleGeneratePlan = async () => {

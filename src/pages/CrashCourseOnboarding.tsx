@@ -82,6 +82,16 @@ const CrashCourseOnboarding = () => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const startedRef = useRef(false);
 
+  // Warn before refresh/close during plan generation
+  useEffect(() => {
+    if (!saving) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [saving]);
+
   // Auto-start conversation on mount
   useEffect(() => {
     if (!startedRef.current && user) {

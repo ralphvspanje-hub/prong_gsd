@@ -1247,22 +1247,21 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
   if (planErr) throw planErr;
 
   // Generate ALL weeks' blocks immediately (short plan, need full visibility)
+  // Parallelize blocks within each week for speed (~3-4x faster)
   for (const week of outline.weeks) {
     const activePillarCount = week.pillars.length;
-    for (const wp of week.pillars) {
-      try {
-        await generateBlock(supabase, supabaseAdmin, geminiApiKey, {
-          userId,
-          planId: plan.id,
-          weekNumber: wp.week_number || week.week_number,
-          pillarId: wp.pillar_id,
-          pillarName: wp.pillar_name,
-          weeklyGoal: wp.weekly_goal,
-          profile,
-          activePillarCount,
-          planType: "interview_prep",
-        });
-      } catch (err: any) {
+    const blockPromises = week.pillars.map((wp) =>
+      generateBlock(supabase, supabaseAdmin, geminiApiKey, {
+        userId,
+        planId: plan.id,
+        weekNumber: wp.week_number || week.week_number,
+        pillarId: wp.pillar_id,
+        pillarName: wp.pillar_name,
+        weeklyGoal: wp.weekly_goal,
+        profile,
+        activePillarCount,
+        planType: "interview_prep",
+      }).catch((err: any) => {
         console.error(
           `Interview block gen failed for ${wp.pillar_name} week ${week.week_number}:`,
           err,
@@ -1270,8 +1269,10 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
         warnings.push(
           `Failed to generate week ${week.week_number} block for "${wp.pillar_name}": ${err.message}`,
         );
-      }
-    }
+        return null;
+      }),
+    );
+    await Promise.all(blockPromises);
   }
 
   // Initialize user_progress if it doesn't exist (shared with learning plan)
