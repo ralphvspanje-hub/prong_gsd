@@ -11,9 +11,12 @@ import { CheckinModal } from "@/components/plan/CheckinModal";
 import { PlanCompletionModal } from "@/components/plan/PlanCompletionModal";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import DashboardToggle from "@/components/plan/DashboardToggle";
+import InterviewCountdown from "@/components/plan/InterviewCountdown";
+import { MistakeJournalDisplay } from "@/components/plan/MistakeJournalDisplay";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Zap, Loader2, ArrowRight } from "lucide-react";
+import { Zap, Loader2, ArrowRight, Target } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Tables } from "@/integrations/supabase/types";
@@ -54,6 +57,17 @@ const Dashboard = () => {
   const queryClient = useQueryClient();
   const userId = user?.id;
 
+  // View mode toggle (persisted in localStorage)
+  const [viewMode, setViewMode] = useState<"learning" | "interview_prep">(() =>
+    (localStorage.getItem("pronggsd-dashboard-view") as "learning" | "interview_prep") || "learning"
+  );
+
+  const handleViewToggle = (mode: "learning" | "interview_prep") => {
+    setViewMode(mode);
+    localStorage.setItem("pronggsd-dashboard-view", mode);
+    setBlockPollCount(0);
+  };
+
   // Modal state
   const [checkinBlock, setCheckinBlock] = useState<PlanBlock | null>(null);
   const [showPlanComplete, setShowPlanComplete] = useState(false);
@@ -64,7 +78,7 @@ const Dashboard = () => {
   // ---- Queries ----
 
   // Active learning plan
-  const { data: plan, isLoading: planLoading } = useQuery({
+  const { data: learningPlan, isLoading: learningPlanLoading } = useQuery({
     queryKey: ["learning-plan", userId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -72,12 +86,50 @@ const Dashboard = () => {
         .select("*")
         .eq("user_id", userId!)
         .eq("is_active", true)
+        .eq("plan_type", "learning")
         .maybeSingle();
       if (error) throw error;
       return data as LearningPlan | null;
     },
     enabled: !!userId,
   });
+
+  // Active interview prep plan
+  const { data: interviewPlan, isLoading: interviewPlanLoading } = useQuery({
+    queryKey: ["interview-plan", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("learning_plans")
+        .select("*")
+        .eq("user_id", userId!)
+        .eq("is_active", true)
+        .eq("plan_type", "interview_prep")
+        .maybeSingle();
+      if (error) throw error;
+      return data as LearningPlan | null;
+    },
+    enabled: !!userId,
+  });
+
+  // Interview profile context (for countdown)
+  const { data: interviewProfile } = useQuery({
+    queryKey: ["interview-profile", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_profile")
+        .select("interview_target_role, interview_date, interview_intensity")
+        .eq("user_id", userId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!userId && !!interviewPlan,
+  });
+
+  // Derived: which plan is active for this view
+  const plan = viewMode === "interview_prep" ? interviewPlan : learningPlan;
+  const planLoading = viewMode === "interview_prep" ? interviewPlanLoading : learningPlanLoading;
+  const hasBothPlans = !!learningPlan && !!interviewPlan;
 
   // Pillars (for name lookup)
   const { data: pillars } = useQuery({
@@ -386,9 +438,18 @@ const Dashboard = () => {
 
   // ---- Render ----
 
-  // No-plan redirect to context upload (then onboarding)
-  if (!planLoading && !plan && userId) {
+  // No-plan redirect — only if neither plan type exists
+  if (!learningPlanLoading && !interviewPlanLoading && !learningPlan && !interviewPlan && userId) {
     return <Navigate to="/context-upload" replace />;
+  }
+
+  // If current view's plan doesn't exist but the other does, auto-switch
+  if (!planLoading && !plan && userId) {
+    if (viewMode === "interview_prep" && learningPlan) {
+      handleViewToggle("learning");
+    } else if (viewMode === "learning" && interviewPlan) {
+      handleViewToggle("interview_prep");
+    }
   }
 
   // Loading state
@@ -470,6 +531,34 @@ const Dashboard = () => {
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-5 py-4">
+        {/* Plan type toggle (only when both plans exist) */}
+        {hasBothPlans && (
+          <div className="flex justify-center">
+            <DashboardToggle viewMode={viewMode} onToggle={handleViewToggle} />
+          </div>
+        )}
+
+        {/* Interview countdown (when in interview prep mode) */}
+        {viewMode === "interview_prep" && interviewProfile && (
+          <InterviewCountdown
+            interviewDate={interviewProfile.interview_date}
+            targetRole={interviewProfile.interview_target_role}
+            intensity={interviewProfile.interview_intensity}
+          />
+        )}
+
+        {/* Interview prep banner (when only learning plan exists) */}
+        {!interviewPlan && learningPlan && viewMode === "learning" && (
+          <Link to="/interview-onboarding" className="block">
+            <div className="flex items-center gap-3 rounded-lg border border-dashed border-orange-500/30 bg-orange-500/5 px-4 py-3 hover:bg-orange-500/10 transition-colors cursor-pointer">
+              <Target className="h-4 w-4 text-orange-500 shrink-0" />
+              <p className="text-sm text-muted-foreground">
+                Interview coming up? <span className="text-orange-500 font-medium">Start a crash course</span>
+              </p>
+            </div>
+          </Link>
+        )}
+
         {/* Streak counter */}
         <StreakCounter progress={progress || null} />
 
@@ -530,6 +619,11 @@ const Dashboard = () => {
           pillars={(pillars || []).map((p) => ({ id: p.id, name: p.name }))}
           onToggleTask={handleToggleTask}
         />
+
+        {/* Mistake journal (interview prep only) */}
+        {viewMode === "interview_prep" && userId && (
+          <MistakeJournalDisplay userId={userId} />
+        )}
 
         {/* View full plan link */}
         <div className="pt-2">

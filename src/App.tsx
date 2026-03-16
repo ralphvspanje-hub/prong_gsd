@@ -15,6 +15,8 @@ import History from "./pages/History";
 import SettingsPage from "./pages/SettingsPage";
 import Mentor from "./pages/Mentor";
 import PlanOverview from "./pages/PlanOverview";
+import InterviewOnboarding from "./pages/InterviewOnboarding";
+import MockInterview from "./pages/MockInterview";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -62,15 +64,90 @@ const App = () => (
             <BrowserRouter>
               <Routes>
                 <Route path="/auth" element={<AuthRoute />} />
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                <Route path="/plan" element={<ProtectedRoute><PlanOverview /></ProtectedRoute>} />
-                <Route path="/context-upload" element={<ProtectedRoute><ContextUpload /></ProtectedRoute>} />
-                <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
-                <Route path="/progress" element={<ProtectedRoute><Progress /></ProtectedRoute>} />
-                <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
-                <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-                <Route path="/mentor" element={<ProtectedRoute><Mentor /></ProtectedRoute>} />
+                <Route
+                  path="/"
+                  element={<Navigate to="/dashboard" replace />}
+                />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <Dashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/plan"
+                  element={
+                    <ProtectedRoute>
+                      <PlanOverview />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/context-upload"
+                  element={
+                    <ProtectedRoute>
+                      <ContextUpload />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/onboarding"
+                  element={
+                    <ProtectedRoute>
+                      <Onboarding />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/interview-onboarding"
+                  element={
+                    <ProtectedRoute>
+                      <InterviewOnboarding />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/mock-interview/:id"
+                  element={
+                    <ProtectedRoute>
+                      <MockInterview />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/progress"
+                  element={
+                    <ProtectedRoute>
+                      <Progress />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/history"
+                  element={
+                    <ProtectedRoute>
+                      <History />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/settings"
+                  element={
+                    <ProtectedRoute>
+                      <SettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/mentor"
+                  element={
+                    <ProtectedRoute>
+                      <Mentor />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="/about" element={<About />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

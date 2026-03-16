@@ -4,7 +4,7 @@
 
 ProngGSD ("Get Shit Done") is an AI-powered learning orchestrator, forked from DailyProng. Instead of generating learning content directly, it builds personalized multi-week plans that route users to the best external platforms for each skill, with task tracking and pacing adaptation. Users complete a structured AI onboarding, then follow a plan of daily tasks with external resources. An AI mentor provides ongoing career guidance and can restructure the plan. Dark/light theme.
 
-**Status:** Phase 8 (Polish and Launch Prep) complete. Dead code removed (UnitDisplay, NavLink, Index.tsx). Critical bugs fixed: Gemini model mismatch in extend_plan, plan generation error handling, Dashboard silent polling timeout, CheckinModal close handler. About.tsx rebranded from DailyProng to ProngGSD. Curated resources expanded from 18 to 55+ entries across SQL, Python, Interview Prep, Data Viz, and General. See `IMPLEMENTATION_DOC_LEARNING_ORCHESTRATOR.md` for the full vision.
+**Status:** Phase 9 (Interview Prep Mode) in progress. Phase 1 complete: parallel interview prep crash course. Phase 2 complete: AI mock interviews with edge function (`gsd-mock-interview`), chat UI (`/mock-interview/:id`), "Start Mock Interview" button on tasks, mistake journal (form + dashboard display). Phase 3 (main onboarding detection) pending. Previous: Phase 8 (Polish and Launch Prep) complete. See `IMPLEMENTATION_DOC_LEARNING_ORCHESTRATOR.md` for the full vision.
 
 ## Tech Stack
 
@@ -42,6 +42,8 @@ prong_gsd/
 │       ├── gsd-mentor-chat/         # AI mentor conversation
 │       ├── gsd-apply-mentor-changes/ # Apply pillar mutations
 │       ├── gsd-generate-plan/       # AI plan generation (multi-week outlines + weekly plan blocks)
+│       ├── gsd-interview-onboarding/ # AI interview prep mini-onboarding (3-4 turns)
+│       ├── gsd-mock-interview/      # AI mock interview sessions (start/continue/complete)
 │       ├── gsd-onboarding-chat/     # AI onboarding conversation
 │       ├── gsd-process-checkin/     # Task/block completion, streak, pacing, pillar leveling
 │       └── gsd-reset-user-data/     # Destructive data reset
@@ -79,9 +81,20 @@ Each subfolder has its own `CLAUDE.md`. Read it when working in that folder.
 | **plan_tasks** | Individual tasks within plan blocks | user_id scoped |
 | **user_progress** | Streak and progress tracking | user_id scoped |
 
+### Interview Prep tables (Phase 9)
+
+| Table | Purpose | RLS |
+|-------|---------|-----|
+| **mock_interviews** | AI mock interview sessions with conversation history | user_id scoped |
+| **mistake_journal** | Post-mock mistake tracking (timebox method) | user_id scoped |
+
+### New columns on learning_plans
+
+`plan_type` — `'learning'` (default) or `'interview_prep'`. Both can be `is_active = true` simultaneously.
+
 ### New columns on user_profile
 
-`pacing_profile`, `time_commitment`, `job_situation`, `job_timeline_weeks`, `tool_setup`, `resume_text`, `linkedin_context`
+`pacing_profile`, `time_commitment`, `job_situation`, `job_timeline_weeks`, `tool_setup`, `resume_text`, `linkedin_context`, `interview_target_role`, `interview_company`, `interview_company_context`, `interview_date`, `interview_intensity`, `interview_weak_areas`, `interview_format`
 
 ## Key Architectural Rules
 
@@ -122,8 +135,10 @@ Everything in `src/components/ui/` is a shadcn/ui primitive. Add new ones via th
 | `/` | — | — | Redirects to `/dashboard` |
 | `/dashboard` | Dashboard | Protected | Three-layer daily task view (redirects to `/onboarding` if no plan) |
 | `/plan` | PlanOverview | Protected | Full multi-week plan timeline (redirects to `/onboarding` if no plan) |
-| `/context-upload` | ContextUpload | Protected | Resume/LinkedIn PDF upload before onboarding (optional, skippable). Redirects to `/dashboard` if plan exists. |
+| `/context-upload` | ContextUpload | Protected | Resume/LinkedIn PDF upload before onboarding (optional, skippable). Redirects to `/dashboard` if plan exists. If pillars exist but no plan (post-rewind), shows "Generate Plan" button to skip onboarding. |
 | `/onboarding` | Onboarding | Protected | AI onboarding chat |
+| `/interview-onboarding` | InterviewOnboarding | Protected | Interview prep mini-onboarding (3-4 turns) |
+| `/mock-interview/:id` | MockInterview | Protected | AI mock interview chat + feedback + mistake journal |
 | `/progress` | Progress | Protected | Plan-based progress: stats, streak + heatmap, weekly/pillar charts (Recharts), pillar levels, plan summary |
 | `/history` | History | Protected | Plan blocks with tasks, searchable/filterable by pillar and week |
 | `/settings` | SettingsPage | Protected | Profile, mentor name, pillars, LinkedIn/resume context, danger zone |
@@ -150,7 +165,7 @@ Env vars in `.env.local`:
 
 Edge function env vars (set in Supabase dashboard):
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
-- `GEMINI_API_KEY` — Google Generative AI API key (used by gsd-mentor-chat, gsd-generate-plan, gsd-onboarding-chat)
+- `GEMINI_API_KEY` — Google Generative AI API key (used by gsd-mentor-chat, gsd-generate-plan, gsd-onboarding-chat, gsd-interview-onboarding, gsd-mock-interview)
 - `OWNER_EMAIL` — Owner account email; gets 500/day rate limit instead of 50
 
 ## Common Gotchas
@@ -160,13 +175,18 @@ Edge function env vars (set in Supabase dashboard):
 - `supabase/config.toml` has `verify_jwt = false` for both edge functions — JWT validation is done manually in the function code
 - Path alias: `@/` maps to `src/`
 - Dashboard redirects to `/context-upload` if no plan exists; shows three-layer task tracker if plan exists. Block polling has a 30s timeout with retry button on failure.
+- `gsd-reset-user-data` deletes ProngGSD plan data (plan_tasks → plan_blocks → learning_plans → user_progress) in all modes (rewind, full, delete_account). Rewind preserves profile, pillars, phases, onboarding_conversations — use it to test plan generation without re-doing onboarding.
+- ContextUpload shows "Generate Plan from Existing Pillars" button when pillars exist but no plan (post-rewind state), calling `gsd-generate-plan` directly with `full_plan` mode
 - Demo mode entry point is hidden on Auth page — demo context still exists but is non-functional with new task tracker dashboard
 - `useUnitGeneration` hook was removed in Phase 4, file deleted in Phase 8
 - Plan block completion routes through `gsd-process-checkin` (block_complete) → then frontend calls `gsd-generate-plan` for next week with difficulty_adjustment from the response
 - Streak tracking is authoritative in `gsd-process-checkin` — frontend does NOT write to `user_progress` for streaks (only decrements `total_tasks_completed` on un-completion)
 - Task completion fires `gsd-process-checkin` as fire-and-forget (non-blocking); block completion awaits the response
 - `pillars.blocks_completed_at_level` tracks blocks completed at current level for threshold-based leveling — reset to 0 on level change
-- `gsd-generate-plan` has three modes: `full_plan`, `plan_block`, `extend_plan` — extend_plan adds weeks to exploratory plans
+- `gsd-generate-plan` has four modes: `full_plan`, `plan_block`, `extend_plan`, `interview_plan` — interview_plan generates 1-3 week intensive crash courses with all blocks upfront
+- `learning_plans.plan_type` scopes plans: `'learning'` or `'interview_prep'`. Both can be active simultaneously. Dashboard toggle switches between them (stored in localStorage `pronggsd-dashboard-view`).
+- Interview prep plan generation only deactivates other `interview_prep` plans, NOT `learning` plans (and vice versa)
+- Interview-specific pillars use `sort_order >= 100` to avoid collision with main learning pillars
 - Mobile bottom nav has 5 items (History hidden) — History is only in the desktop nav
 - `About.tsx` rebranded from DailyProng to ProngGSD in Phase 8
 - localStorage keys use `pronggsd-` prefix (not `dailyprong-`)
@@ -181,6 +201,13 @@ Edge function env vars (set in Supabase dashboard):
 - Progress page shows pillar levels as current snapshot only — no historical level change data stored
 - History page replaced legacy units view with plan blocks + tasks — old units data no longer displayed
 - History page fetches all blocks + all tasks in two queries (bounded by plan size, not paginated)
+- `gsd-mock-interview` manages persistent conversation sessions server-side (supabaseAdmin writes) — unlike interview-onboarding which is stateless. Three actions: start (creates row + first AI question), continue (appends messages), complete (forces evaluation).
+- Mock interview completion detected via `[INTERVIEW_COMPLETE]...JSON...[/INTERVIEW_COMPLETE]` tag in AI response. Forced completion (early end) builds fallback feedback if AI doesn't include the tag.
+- TaskItem renders "Start Mock Interview" button when `resource_type === "mock_interview"` — calls the edge function to create a session, then navigates to `/mock-interview/:id`
+- `gsd-generate-plan` passes through `resource_type: "mock_interview"` (not collapsed to `"search_query"`) — tasks with this type have `platform: "ProngGSD"`, null url/search_query, and MOCK: prefixed actions
+- MistakeJournalForm marks the parent `plan_task` as completed when saving (or skipping) — this is the only completion path for mock interview tasks
+- MistakeJournalDisplay appears on Dashboard only when `viewMode === "interview_prep"` — shows last 10 mistakes with pattern detection
+- `gsd-reset-user-data` deletes `mistake_journal` → `mock_interviews` before `plan_tasks` (FK order)
 
 ---
 

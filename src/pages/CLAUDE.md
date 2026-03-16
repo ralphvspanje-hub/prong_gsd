@@ -5,10 +5,12 @@
 | File | Route | Guard | Purpose |
 |------|-------|-------|---------|
 | Auth.tsx | `/auth` | AuthRoute | Login/signup form (demo entry hidden) |
-| ContextUpload.tsx | `/context-upload` | ProtectedRoute | Resume/LinkedIn PDF upload before onboarding (optional, skippable). Redirects to `/dashboard` if plan exists. |
-| Dashboard.tsx | `/dashboard` | ProtectedRoute | Three-layer daily task view: streak, weekly goals, task list with checkboxes. Redirects to `/context-upload` if no active plan. Polls for blocks with 30s timeout on generation failure. |
+| ContextUpload.tsx | `/context-upload` | ProtectedRoute | Resume/LinkedIn PDF upload before onboarding (optional, skippable). Redirects to `/dashboard` if plan exists. If pillars exist but no plan (post-rewind), shows "Generate Plan" button to skip onboarding. |
+| Dashboard.tsx | `/dashboard` | ProtectedRoute | Three-layer daily task view: streak, weekly goals, task list with checkboxes. Supports dual plan types (learning + interview_prep) with toggle. Redirects to `/context-upload` if no active plan of either type. Polls for blocks with 30s timeout on generation failure. |
 | PlanOverview.tsx | `/plan` | ProtectedRoute | Full multi-week plan timeline with completion status per week. Redirects to `/onboarding` if no active plan. |
 | Onboarding.tsx | `/onboarding` | ProtectedRoute | AI onboarding chat → blueprint review → confirm. Stays on page if plan generation fails (does not redirect to dashboard). |
+| InterviewOnboarding.tsx | `/interview-onboarding` | ProtectedRoute | Interview prep mini-onboarding (3-4 turns) → review → confirm. Creates interview-specific pillars and calls gsd-generate-plan with interview_plan mode. Sets localStorage view to interview_prep. |
+| MockInterview.tsx | `/mock-interview/:id` | ProtectedRoute | AI mock interview chat UI. Loads existing session from `mock_interviews` table. Chat phase: send messages via `gsd-mock-interview` continue action. End Interview button triggers complete action. Review phase: feedback card (score, strengths, improvements, mistakes, question breakdown), collapsible conversation review, inline MistakeJournalForm. Marks plan_task completed on journal save. |
 | Progress.tsx | `/progress` | ProtectedRoute | Plan-based progress: summary stats, streak + activity heatmap, weekly completion chart (Recharts), pillar level cards, pillar completion chart, compact plan summary with link to /plan |
 | History.tsx | `/history` | ProtectedRoute | Completed plan blocks with tasks, searchable/filterable by pillar and week. Collapsible block cards with read-only task list. |
 | SettingsPage.tsx | `/settings` | ProtectedRoute | Mentor name, learning prefs, pillar management, LinkedIn/resume context, danger zone |
@@ -25,3 +27,7 @@
 ## No-plan redirects (Phase 4)
 
 Dashboard redirects to `/context-upload` when the user has no active `learning_plan`. ContextUpload redirects to `/dashboard` if plan exists. PlanOverview redirects to `/onboarding` if no plan. Other protected routes remain accessible without a plan (e.g., Settings for uploading resume/LinkedIn before completing onboarding).
+
+## Post-rewind flow
+
+After rewind (Settings → Rewind), plan data is deleted but profile + pillars are preserved. Dashboard redirects to `/context-upload`, which detects existing pillars and shows a "Generate Plan from Existing Pillars" button. This calls `gsd-generate-plan` with `full_plan` mode directly, skipping the AI onboarding chat.

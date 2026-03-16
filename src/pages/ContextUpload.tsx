@@ -36,6 +36,7 @@ const ContextUpload = () => {
   const [linkedinFile, setLinkedinFile] = useState<string | null>(null);
   const [uploadingResume, setUploadingResume] = useState(false);
   const [uploadingLinkedin, setUploadingLinkedin] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const isOwner = user?.email?.toLowerCase() === import.meta.env.VITE_OWNER_EMAIL?.toLowerCase();
 
   const handleAdminReset = async () => {
@@ -74,9 +75,37 @@ const ContextUpload = () => {
     );
   }
 
+  // Check if pillars already exist (post-rewind state — can skip onboarding)
+  const { data: hasPillars } = useQuery({
+    queryKey: ["has-pillars", user?.id],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("pillars")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user!.id);
+      return (count ?? 0) > 0;
+    },
+    enabled: !!user?.id && !isLoading && !hasPlan,
+  });
+
   if (hasPlan) {
     return <Navigate to="/dashboard" replace />;
   }
+
+  const handleGeneratePlan = async () => {
+    setGenerating(true);
+    try {
+      const { error } = await supabase.functions.invoke("gsd-generate-plan", {
+        body: { mode: "full_plan" },
+      });
+      if (error) throw error;
+      toast.success("Plan generated! Redirecting...");
+      navigate("/dashboard");
+    } catch (err: any) {
+      toast.error("Plan generation failed: " + (err.message || "Unknown error"));
+      setGenerating(false);
+    }
+  };
 
   const handleFileUpload = async (
     file: File,
@@ -242,22 +271,49 @@ const ContextUpload = () => {
 
           {/* Actions */}
           <div className="space-y-3 pt-2">
-            <Button
-              className="w-full gap-2"
-              onClick={() => navigate("/onboarding")}
-              disabled={isUploading}
-            >
-              Continue to onboarding <ArrowRight className="h-4 w-4" />
-            </Button>
-            <div className="text-center">
-              <button
-                onClick={() => navigate("/onboarding")}
-                disabled={isUploading}
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Skip for now
-              </button>
-            </div>
+            {hasPillars ? (
+              <>
+                <Button
+                  className="w-full gap-2"
+                  onClick={handleGeneratePlan}
+                  disabled={isUploading || generating}
+                >
+                  {generating ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Building your plan...</>
+                  ) : (
+                    <><Zap className="h-4 w-4" /> Generate Plan from Existing Pillars</>
+                  )}
+                </Button>
+                <div className="text-center">
+                  <button
+                    onClick={() => navigate("/onboarding")}
+                    disabled={isUploading || generating}
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Or re-do onboarding from scratch
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <Button
+                  className="w-full gap-2"
+                  onClick={() => navigate("/onboarding")}
+                  disabled={isUploading}
+                >
+                  Continue to onboarding <ArrowRight className="h-4 w-4" />
+                </Button>
+                <div className="text-center">
+                  <button
+                    onClick={() => navigate("/onboarding")}
+                    disabled={isUploading}
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Skip for now
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

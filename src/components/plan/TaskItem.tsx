@@ -1,9 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Clock, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { Clock, ChevronDown, ChevronUp, ExternalLink, MessageSquare, Loader2 } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 type PlanTask = Tables<"plan_tasks">;
 
@@ -20,6 +23,7 @@ const PLATFORM_COLORS: Record<string, string> = {
   google: "bg-blue-500/10 text-blue-600 border-blue-500/20",
   leetcode: "bg-orange-500/10 text-orange-600 border-orange-500/20",
   kaggle: "bg-teal-500/10 text-teal-600 border-teal-500/20",
+  pronggsd: "bg-orange-500/10 text-orange-600 border-orange-500/20",
 };
 
 /** Constructs a search URL for the given platform and query. */
@@ -37,7 +41,10 @@ function buildSearchUrl(platform: string, query: string): string {
 /** Individual task with checkbox, platform badge, resource link, time estimate, and why text. */
 export const TaskItem = ({ task, onToggle }: TaskItemProps) => {
   const [whyExpanded, setWhyExpanded] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const navigate = useNavigate();
   const isCompleted = task.is_completed;
+  const isMockInterview = task.resource_type === "mock_interview";
   const platformKey = task.platform.toLowerCase();
   const badgeColor = PLATFORM_COLORS[platformKey] || "bg-muted text-muted-foreground border-border";
 
@@ -85,8 +92,36 @@ export const TaskItem = ({ task, onToggle }: TaskItemProps) => {
           </Badge>
         </div>
 
+        {/* Mock interview button */}
+        {isMockInterview && !isCompleted && (
+          <button
+            disabled={starting}
+            onClick={async () => {
+              setStarting(true);
+              try {
+                const { data, error } = await supabase.functions.invoke("gsd-mock-interview", {
+                  body: { action: "start", task_id: task.id },
+                });
+                if (error || !data?.mock_id) {
+                  toast.error("Failed to start mock interview");
+                  setStarting(false);
+                  return;
+                }
+                navigate(`/mock-interview/${data.mock_id}`);
+              } catch {
+                toast.error("Failed to start mock interview");
+                setStarting(false);
+              }
+            }}
+            className="inline-flex items-center gap-1 text-xs text-orange-500 hover:text-orange-600 font-medium disabled:opacity-50"
+          >
+            {starting ? <Loader2 className="h-3 w-3 animate-spin" /> : <MessageSquare className="h-3 w-3" />}
+            {starting ? "Starting..." : "Start Mock Interview"}
+          </button>
+        )}
+
         {/* Resource link */}
-        {resourceUrl && !isCompleted && (
+        {!isMockInterview && resourceUrl && !isCompleted && (
           <a
             href={resourceUrl}
             target="_blank"

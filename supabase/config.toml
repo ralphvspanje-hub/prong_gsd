@@ -15,5 +15,11 @@ verify_jwt = false
 [functions.gsd-process-checkin]
 verify_jwt = false
 
+[functions.gsd-interview-onboarding]
+verify_jwt = false
+
+[functions.gsd-mock-interview]
+verify_jwt = false
+
 [functions.gsd-reset-user-data]
 verify_jwt = false

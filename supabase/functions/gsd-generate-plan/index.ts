@@ -24,18 +24,21 @@ const PACING_WEEKS: Record<string, [number, number]> = {
   aggressive: [4, 8],
   steady: [8, 12],
   exploratory: [12, 16],
+  intensive: [1, 3],
 };
 
 const PACING_TASKS: Record<string, [number, number]> = {
   aggressive: [4, 6],
   steady: [3, 4],
   exploratory: [2, 3],
+  intensive: [5, 8],
 };
 
 const PACING_TONE: Record<string, string> = {
   aggressive: 'Direct and urgent. "You need this for interviews." Push for action.',
   steady: 'Encouraging and milestone-focused. "Great progress — here\'s your next step."',
   exploratory: 'Relaxed and curiosity-driven. "Explore this when you feel like it."',
+  intensive: 'High-pressure sprint. "Interview is coming. Every hour counts. Do this NOW." No fluff.',
 };
 
 // Maps pillar name keywords → curated_resources skill_area values
@@ -48,6 +51,14 @@ const SKILL_AREA_MAP: Record<string, string[]> = {
   coding: ["general_coding"],
   github: ["general_coding"],
   programming: ["general_coding"],
+  behavioral: ["interview_behavioral", "interview_behavioral_prep"],
+  star: ["interview_behavioral_prep"],
+  system: ["interview_system_design"],
+  design: ["interview_system_design"],
+  statistics: ["interview_stats"],
+  probability: ["interview_stats"],
+  stats: ["interview_stats"],
+  mock: ["interview_mock_external"],
 };
 
 // skill_area suffixes that imply level ranges
@@ -233,6 +244,7 @@ async function generateOutline(
   supabaseAdmin: any,
   userId: string,
   geminiApiKey: string,
+  planType: string = "learning",
 ): Promise<{ plan_id: string; total_weeks: number; warnings: string[] }> {
   const warnings: string[] = [];
 
@@ -370,12 +382,13 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
   }
   outline.total_weeks = outline.weeks.length;
 
-  // Deactivate any existing active plan
+  // Deactivate any existing active plan of the same type
   await supabaseAdmin
     .from("learning_plans")
     .update({ is_active: false, updated_at: new Date().toISOString() })
     .eq("user_id", userId)
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .eq("plan_type", planType);
 
   // Insert new plan
   const { data: plan, error: planErr } = await supabaseAdmin
@@ -386,6 +399,7 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       pacing_profile: pacingProfile,
       plan_outline: outline,
       is_active: true,
+      plan_type: planType,
     })
     .select()
     .single();
@@ -564,6 +578,7 @@ TASK RULES:
 - Total estimated time should be ~${minutesForThisPillar * 5}–${minutesForThisPillar * 7} minutes for the week (${minutesForThisPillar} min/day).
 - Use curated resource URLs when they match. Set resource_type to "curated" and provide the url.
 - When no curated resource fits, set resource_type to "search_query", url to null, and provide a specific search_query.
+- For mock interview practice tasks, set resource_type to "mock_interview", platform to "ProngGSD", url to null, search_query to null. Action should describe the interview type with a "MOCK:" prefix (e.g., "MOCK: Behavioral interview — STAR method practice", "MOCK: SQL mock — window functions and CTEs"). These are handled in-app.
 - Each task should be concrete and completable in one sitting.
 - Include a healthy mix: hands-on practice (exercises, challenges), reading (docs, articles), AND video content (YouTube lectures, talks, tutorials).
 - For conceptual, theory, or lecture-style tasks, generate YouTube-specific search queries (prefix with "youtube: "). E.g., "youtube: Stanford CS229 introduction to machine learning lecture" or "youtube: Andrej Karpathy LLM explained". Be specific — name known educators, universities, or channels when relevant to the topic.
@@ -585,6 +600,16 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       "search_query": null,
       "estimated_time_minutes": 30,
       "why_text": "Why this task matters"
+    },
+    {
+      "task_order": 2,
+      "action": "MOCK: Behavioral interview — STAR method practice",
+      "platform": "ProngGSD",
+      "resource_type": "mock_interview",
+      "url": null,
+      "search_query": null,
+      "estimated_time_minutes": 20,
+      "why_text": "Practicing under pressure reveals gaps before the real interview."
     }
   ],
   "pacing_note": "Brief pacing context for the learner",
@@ -641,9 +666,9 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
         task_order: task.task_order || 1,
         action: task.action || "Complete the task",
         platform: task.platform || "Google",
-        resource_type: task.resource_type === "curated" ? "curated" : "search_query",
+        resource_type: ["curated", "mock_interview"].includes(task.resource_type) ? task.resource_type : "search_query",
         url: task.resource_type === "curated" ? (task.url || null) : null,
-        search_query: task.resource_type === "search_query" ? (task.search_query || null) : null,
+        search_query: task.resource_type !== "curated" && task.resource_type !== "mock_interview" ? (task.search_query || null) : null,
         estimated_time_minutes: task.estimated_time_minutes || null,
         why_text: task.why_text || null,
         is_completed: false,
@@ -822,6 +847,233 @@ Respond with ONLY valid JSON, no markdown fences:
 }
 
 // ---------------------------------------------------------------------------
+// Interview prep plan generation
+// ---------------------------------------------------------------------------
+
+async function generateInterviewPlan(
+  supabase: any,
+  supabaseAdmin: any,
+  userId: string,
+  geminiApiKey: string,
+): Promise<{ plan_id: string; total_weeks: number; warnings: string[] }> {
+  const warnings: string[] = [];
+
+  // Fetch interview context + pillars
+  const [profileRes, pillarsRes] = await Promise.all([
+    supabase.from("user_profile").select("*").eq("user_id", userId).maybeSingle(),
+    supabase.from("pillars").select("*").eq("user_id", userId).eq("is_active", true).order("sort_order"),
+  ]);
+
+  const profile = profileRes.data;
+  const allPillars = pillarsRes.data || [];
+
+  // Use interview-specific pillars (high sort_order, created by interview onboarding)
+  // Filter to pillars created for interview prep (sort_order >= 100)
+  const interviewPillars = allPillars.filter((p: any) => p.sort_order >= 100);
+  const pillars = interviewPillars.length > 0 ? interviewPillars : allPillars;
+
+  if (pillars.length === 0) {
+    throw Object.assign(new Error("No pillars found. Complete interview prep setup first."), { status: 400 });
+  }
+
+  // Fetch topic maps for interview pillars
+  const pillarIds = pillars.map((p: any) => p.id);
+  const { data: topicMaps } = await supabase
+    .from("topic_map")
+    .select("*")
+    .in("pillar_id", pillarIds)
+    .order("priority_order");
+
+  // Determine plan duration
+  let planWeeks = profile?.interview_date
+    ? Math.max(1, Math.min(3, Math.ceil((new Date(profile.interview_date).getTime() - Date.now()) / (7 * 24 * 60 * 60 * 1000))))
+    : 2;
+
+  const intensity = profile?.interview_intensity || "adapted";
+  const dailyMinutes = intensity === "100_percent" ? 180 : parseTimeCommitment(profile);
+
+  const pillarSummaries = pillars.map((p: any) => {
+    const clusters = (topicMaps || []).filter((t: any) => t.pillar_id === p.id);
+    return `- ${p.name} (level ${p.current_level}/5): ${p.description || ""}
+    Topics: ${clusters.map((c: any) => `${c.cluster_name} [${c.subtopics?.join(", ") || ""}]`).join("; ")}`;
+  }).join("\n");
+
+  // Build interview-specific context
+  let interviewContext = "";
+  if (profile?.interview_target_role) {
+    interviewContext += `\nTARGET ROLE: ${profile.interview_target_role}`;
+  }
+  if (profile?.interview_company) {
+    interviewContext += `\nCOMPANY: ${profile.interview_company}`;
+  }
+  if (profile?.interview_company_context) {
+    interviewContext += `\nCOMPANY CONTEXT: ${profile.interview_company_context}`;
+  }
+  if (profile?.interview_format) {
+    interviewContext += `\nINTERVIEW FORMAT: ${profile.interview_format}`;
+  }
+  if (profile?.interview_weak_areas?.length > 0) {
+    interviewContext += `\nWEAK AREAS: ${profile.interview_weak_areas.join(", ")}`;
+  }
+
+  let extraContext = "";
+  if (profile?.resume_text) {
+    extraContext += `\n\nRESUME CONTEXT:\n${profile.resume_text.slice(0, 3000)}`;
+  }
+  if (profile?.linkedin_context) {
+    extraContext += `\n\nLINKEDIN CONTEXT:\n${profile.linkedin_context.slice(0, 3000)}`;
+  }
+
+  const systemPrompt = `You are ProngGSD Interview Prep Architect. You build aggressive, daily-granularity crash course plans for job interviews.
+
+INTERVIEW CONTEXT:
+${interviewContext}
+
+LEARNER PROFILE:
+- Intensity: ${intensity === "100_percent" ? "FULL — 3-4+ hours/day, no holding back" : `Adapted — ${dailyMinutes} minutes/day`}
+- Plan duration: ${planWeeks} week${planWeeks > 1 ? "s" : ""}
+
+PILLARS:
+${pillarSummaries}
+${extraContext}
+
+INTERVIEW PREP PLAN RULES:
+- Generate a ${planWeeks}-week plan with DAILY milestones — every single day must have a clear focus.
+- Each week has ALL pillars active. Interview prep is parallel, not sequential.
+- For each pillar each week, provide a specific weekly_goal that builds on the previous week.
+- Include mock interview slots: 1-3 per day depending on intensity. Mark these clearly with "MOCK:" prefix in the weekly_goal.
+- Week 1 starts with CONTEXT: how companies typically test each skill. Then practice.
+- Final week is heavy on mock interviews and review — simulating real interview conditions.
+- Difficulty should ramp: Week 1 = foundation + context, Week 2+ = practice + mocks at interview difficulty.
+- ${intensity === "100_percent" ? "This is a full-time sprint. Pack every day with meaningful work." : "Respect the time budget but don't waste a single minute."}
+
+CONTEXT-FIRST APPROACH (critical):
+For each pillar's first week, the weekly_goal MUST start with explaining HOW companies test that skill:
+- SQL: "Companies test window functions, CTEs, and optimization. Practice format: 45-min timed SQL test. Start with..."
+- Behavioral: "STAR method is the standard. Interviewers look for specificity, impact metrics, and team dynamics. Start with..."
+- System Design: "You'll get 45-60 min to design a system. They evaluate trade-offs, scalability thinking, and communication. Start with..."
+- Etc. Be specific to the actual interview format.
+
+Respond with ONLY valid JSON, no markdown fences, no commentary:
+{
+  "total_weeks": ${planWeeks},
+  "weeks": [
+    {
+      "week_number": 1,
+      "pillars": [
+        {
+          "pillar_name": "exact pillar name",
+          "weekly_goal": "specific, detailed goal including HOW they test this + what to practice",
+          "difficulty": 1
+        }
+      ]
+    }
+  ]
+}`;
+
+  const userPrompt = `Generate the ${planWeeks}-week interview prep crash course.`;
+
+  let rawText = await callGemini(geminiApiKey, systemPrompt, userPrompt, 4000);
+  let outline: any;
+  try {
+    outline = parseJSON(rawText);
+  } catch {
+    rawText = await callGemini(
+      geminiApiKey,
+      systemPrompt + "\n\nCRITICAL: Respond with raw JSON only. No markdown, no commentary, no code fences.",
+      userPrompt,
+      4000,
+    );
+    outline = parseJSON(rawText);
+  }
+
+  // Validate and enrich with pillar IDs
+  if (!outline.total_weeks || !Array.isArray(outline.weeks)) {
+    throw new Error("AI returned invalid interview plan outline structure");
+  }
+
+  for (const week of outline.weeks) {
+    if (!Array.isArray(week.pillars)) continue;
+    for (const wp of week.pillars) {
+      const matched = matchPillarByName(wp.pillar_name, pillars);
+      if (matched) {
+        wp.pillar_id = matched.id;
+      } else {
+        warnings.push(`Week ${week.week_number}: pillar "${wp.pillar_name}" not found in DB, skipping.`);
+      }
+    }
+    week.pillars = week.pillars.filter((wp: any) => wp.pillar_id);
+  }
+
+  outline.weeks = outline.weeks.filter((w: any) => w.pillars && w.pillars.length > 0);
+  if (outline.weeks.length === 0) {
+    throw new Error("AI interview plan outline matched zero pillars.");
+  }
+  outline.total_weeks = outline.weeks.length;
+
+  // Deactivate any existing active interview_prep plan (NOT the learning plan)
+  await supabaseAdmin
+    .from("learning_plans")
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .eq("plan_type", "interview_prep");
+
+  // Insert interview prep plan
+  const { data: plan, error: planErr } = await supabaseAdmin
+    .from("learning_plans")
+    .insert({
+      user_id: userId,
+      total_weeks: outline.total_weeks,
+      pacing_profile: "intensive",
+      plan_outline: outline,
+      is_active: true,
+      plan_type: "interview_prep",
+    })
+    .select()
+    .single();
+
+  if (planErr) throw planErr;
+
+  // Generate ALL weeks' blocks immediately (short plan, need full visibility)
+  for (const week of outline.weeks) {
+    const activePillarCount = week.pillars.length;
+    for (const wp of week.pillars) {
+      try {
+        await generateBlock(supabase, supabaseAdmin, geminiApiKey, {
+          userId,
+          planId: plan.id,
+          weekNumber: wp.week_number || week.week_number,
+          pillarId: wp.pillar_id,
+          pillarName: wp.pillar_name,
+          weeklyGoal: wp.weekly_goal,
+          profile,
+          activePillarCount,
+        });
+      } catch (err: any) {
+        console.error(`Interview block gen failed for ${wp.pillar_name} week ${week.week_number}:`, err);
+        warnings.push(`Failed to generate week ${week.week_number} block for "${wp.pillar_name}": ${err.message}`);
+      }
+    }
+  }
+
+  // Initialize user_progress if it doesn't exist (shared with learning plan)
+  const { data: existingProgress } = await supabaseAdmin
+    .from("user_progress")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!existingProgress) {
+    await supabaseAdmin
+      .from("user_progress")
+      .insert({ user_id: userId, current_day: 1, current_streak: 0, longest_streak: 0, total_tasks_completed: 0 });
+  }
+
+  return { plan_id: plan.id, total_weeks: outline.total_weeks, warnings };
+}
+
+// ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
 
@@ -908,7 +1160,17 @@ Deno.serve(async (req) => {
       return jsonRes({ success: true, new_total_weeks: result.new_total_weeks });
     }
 
-    return jsonRes({ error: "Invalid mode. Must be: full_plan, plan_block, extend_plan" }, 400);
+    if (mode === "interview_plan") {
+      const result = await generateInterviewPlan(supabase, supabaseAdmin, userId, geminiApiKey);
+      return jsonRes({
+        success: true,
+        plan_id: result.plan_id,
+        total_weeks: result.total_weeks,
+        warnings: result.warnings.length > 0 ? result.warnings : undefined,
+      });
+    }
+
+    return jsonRes({ error: "Invalid mode. Must be: full_plan, plan_block, extend_plan, interview_plan" }, 400);
   } catch (err: any) {
     console.error(err);
     if (err.status === 429) {

@@ -68,6 +68,16 @@ Deno.serve(async (req) => {
     await admin.from("personal_notes").delete().eq("user_id", userId);
     await admin.from("api_rate_limits").delete().eq("user_id", userId);
 
+    // Phase 2 interview data (order: mistake_journal → mock_interviews for FK constraints)
+    await admin.from("mistake_journal").delete().eq("user_id", userId);
+    await admin.from("mock_interviews").delete().eq("user_id", userId);
+
+    // ProngGSD plan data (order: tasks → blocks → plans for FK constraints)
+    await admin.from("plan_tasks").delete().eq("user_id", userId);
+    await admin.from("plan_blocks").delete().eq("user_id", userId);
+    await admin.from("learning_plans").delete().eq("user_id", userId);
+    await admin.from("user_progress").delete().eq("user_id", userId);
+
     if (mode === "full" || mode === "delete_account") {
       await admin.from("phases").delete().eq("user_id", userId);
       await admin.from("pillars").delete().eq("user_id", userId);

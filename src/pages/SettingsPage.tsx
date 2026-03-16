@@ -12,12 +12,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Loader2, Save, AlertTriangle, Trash2, Minus, Plus, RotateCcw, Rewind, UserX, Upload, FileText, Link } from "lucide-react";
+import { Loader2, Save, AlertTriangle, Trash2, Minus, Plus, RotateCcw, Rewind, UserX, Upload, FileText, Link, Target } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 const SettingsPage = () => {
   const { user } = useAuth();
   const { isDemo } = useDemo();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { mentorName, setMentorName: setGlobalMentorName } = useMentorName();
   const [profile, setProfile] = useState<any>(null);
@@ -495,6 +497,28 @@ const SettingsPage = () => {
                 Upload your resume (PDF, max 5 MB). We'll extract the text to better understand your background.
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Interview Prep */}
+        <Card className="border-orange-500/30">
+          <CardHeader>
+            <CardTitle className="font-serif text-lg flex items-center gap-2">
+              <Target className="h-4 w-4 text-orange-500" />
+              Interview Prep
+            </CardTitle>
+            <CardDescription>
+              Set up an intensive crash course for an upcoming interview. This runs alongside your main learning plan.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={() => navigate("/interview-onboarding")}
+              className="gap-2 bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              <Target className="h-4 w-4" />
+              Start Interview Prep
+            </Button>
           </CardContent>
         </Card>
 

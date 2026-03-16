@@ -6,8 +6,8 @@ Shared Deno modules imported by multiple edge functions.
 
 | Module | Export | Used by |
 |--------|--------|---------|
-| `rateLimit.ts` | `checkRateLimit` | mentor-chat, generate-plan, onboarding-chat |
-| `cors.ts` | `getCorsHeaders` | all 6 functions |
+| `rateLimit.ts` | `checkRateLimit` | mentor-chat, generate-plan, onboarding-chat, interview-onboarding |
+| `cors.ts` | `getCorsHeaders` | all 7 functions |
 
 Rate limits: 50 calls/user/day (500 for owner via `OWNER_EMAIL` env var), 100 calls/IP/day per endpoint. Auto-cleans rows older than 48h from `api_rate_limits`.
 
@@ -74,6 +74,7 @@ Generates multi-week learning plans, individual plan blocks, and plan extensions
 | `full_plan` | `{ mode: "full_plan" }` | Fetches user profile, pillars, phases, topic maps → Gemini generates multi-week outline → stores in `learning_plans` → generates week 1 plan blocks for each active pillar → initializes `user_progress`. Returns `{ success, plan_id, total_weeks, warnings? }` |
 | `plan_block` | `{ mode: "plan_block", plan_id, week_number, pillar_id, weekly_goal, active_pillar_count?, difficulty_adjustment?, feedback_context? }` | Fetches pillar context, curated resources (keyword-matched), previous blocks → Gemini generates detailed block with tasks → stores in `plan_blocks` + `plan_tasks`. Optional `difficulty_adjustment` ("harder"/"easier"/"same") and `feedback_context` (user feedback string) are injected into the AI prompt to adapt difficulty. Returns `{ success, block_id }` |
 | `extend_plan` | `{ mode: "extend_plan", plan_id, additional_weeks }` | Fetches existing plan outline + completed blocks with feedback → Gemini generates additional week outlines continuing from where the user left off → appends to `plan_outline`, updates `total_weeks` → generates first new week's blocks. Returns `{ success, new_total_weeks }` |
+| `interview_plan` | `{ mode: "interview_plan" }` | Fetches interview context from user_profile + interview-specific pillars → Gemini generates 1-3 week intensive outline → stores in `learning_plans` with `plan_type: 'interview_prep'` → generates ALL weeks' blocks immediately (short plan needs full visibility). Only deactivates other `interview_prep` plans, NOT `learning` plans. Pacing: `intensive` (5-8 tasks/block). Returns `{ success, plan_id, total_weeks, warnings? }` |
 
 - **Resource matching**: Static keyword map from pillar name → `curated_resources.skill_area` values, filtered by level. Falls back to AI-generated search queries when no curated resources match.
 - **Level 1 primers**: When pillar level is 1, context_brief includes setup instructions based on `user_profile.tool_setup` flags.
@@ -104,6 +105,54 @@ AI-guided onboarding conversation that discovers the user's career context and b
 - **Discovery dimensions**: Career identity, skill landscape, learning style, growth priorities, unique context, situation & urgency, practical context (time commitment, tool setup). Phase 2 added dimensions 6-7.
 - **Output shape**: `outputs.pillars[]` has `name, description, why_it_matters, starting_level, key_topics`. `outputs.phases[]` has `name, timeline_start, timeline_end, goal, weights`. `outputs.topicMap[]` has `pillar, cluster_name, subtopics, difficulty_level`. Phase 2 additions: `outputs.pacing_profile` (aggressive/steady/exploratory), `outputs.time_commitment`, `outputs.job_situation`, `outputs.job_timeline_weeks`, `outputs.tool_setup` (JSON with python_installed, github_familiar, has_ide, used_practice_platforms).
 
+## interview-onboarding
+
+Fast-track interview prep onboarding conversation (3-4 turns). Phase 9 addition.
+
+- **Auth**: Bearer JWT → `supabase.auth.getUser()` for user ID
+- **Rate limits**: 50 calls/user/day, 100 calls/IP/day
+- **Env vars**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`
+- **AI model**: `gemini-3.1-flash-lite` via Google Generative AI REST API
+- **Settings**: max_tokens 4096, temperature 0.7
+- **MIN_USER_TURNS**: 3 (vs 6 for main onboarding)
+- **No DB writes** — client handles all saves
+
+| Action | Input | Returns |
+|--------|-------|---------|
+| `start` | `{ action: "start", messages: [] }` | `{ message }` — opening greeting |
+| `continue` | `{ action: "continue", messages: [...] }` | `{ message }` or `{ message, outputs }` when complete |
+
+- **Completion detection**: AI wraps output in `[INTERVIEW_PREP_COMPLETE]...[/INTERVIEW_PREP_COMPLETE]`
+- **Output shape**: `{ target_role, company, company_context, interview_date, intensity, weak_areas, interview_format, interview_pillars[], plan_duration_weeks, time_commitment }`
+- **Conversation flow**: Turn 1 (role + timeline) → Turn 2 (format + weak spots + time) → Turn 3 (company context + final check)
+- **Triggered from**: `InterviewOnboarding.tsx`
+
+## mock-interview
+
+AI mock interview sessions with persistent conversation state. Phase 9 Phase 2 addition.
+
+- **Auth**: Bearer JWT → `supabase.auth.getUser()` for user ID
+- **Rate limits**: 200 calls/user/day (high — many messages per session), 100 calls/IP/day
+- **Env vars**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`
+- **AI model**: `gemini-3.1-flash-lite` via Google Generative AI REST API
+- **Settings**: max_tokens 4096, temperature 0.7
+- **DB writes**: Yes — uses `supabaseAdmin` (unlike interview-onboarding which is stateless). Creates and updates `mock_interviews` rows.
+- **Message limits**: Max 2000 chars per user message
+
+| Action | Input | Returns |
+|--------|-------|---------|
+| `start` | `{ action: "start", task_id }` | `{ mock_id, message, interview_type }` — creates DB row + first AI question |
+| `continue` | `{ action: "continue", mock_id, message }` | `{ message, completed, feedback? }` — appends to conversation |
+| `complete` | `{ action: "complete", mock_id }` | `{ message, feedback, completed: true }` — forces early evaluation |
+
+- **Interview type derivation**: Parses task action text for keywords (behavioral, sql/technical, system_design, case_study). Defaults to behavioral.
+- **System prompts**: Per-type prompts (behavioral=STAR method, technical=SQL problems, system_design=architecture, case_study=product). Common rules appended: stay in character, one question at a time, acknowledge before next.
+- **Completion detection**: AI wraps feedback in `[INTERVIEW_COMPLETE]...JSON...[/INTERVIEW_COMPLETE]`. After 6+ user messages, prompt hints to wrap up. Forced completion adds explicit instruction.
+- **Feedback JSON shape**: `{ overall_score, strengths[], areas_to_improve[], key_mistakes[], question_scores[{ question, score, note }], suggested_follow_up }`
+- **Fallback feedback**: If AI doesn't include completion tag on forced end, builds minimal feedback object (score 5).
+- **Duration**: Calculated from `mock_interviews.created_at` to completion time.
+- **Triggered from**: `TaskItem.tsx` (start action via button click), `MockInterview.tsx` (continue/complete actions)
+
 ## process-checkin
 
 Handles task completion analysis, streak tracking, pacing detection, pillar leveling, and plan progression. Rewrites the old unit-based process-feedback logic (Phase 5).
@@ -130,7 +179,8 @@ Destructive data reset endpoint with three modes.
 - **Input**: `{ mode: "full" | "rewind" | "delete_account" }`
 - **Returns**: `{ success: true }`
 - **Service role client**: Used for all deletes (bypasses RLS on tables like `cycles`, `units`, `progress_archive`) and for `admin.auth.admin.deleteUser()`
-- **`full` mode**: Deletes everything — progress_archive, cycles (cascades → units), phases (cascades → phase_weights), pillars (cascades → topic_map, phase_weights), mentor_conversations, onboarding_conversations, personal_notes, api_rate_limits, user_profile. Client redirects to `/onboarding`.
-- **`rewind` mode**: Owner-only (checked against `OWNER_EMAIL` env var, 403 if not owner). Deletes progress_archive, cycles (cascades → units), mentor_conversations, personal_notes, api_rate_limits. Resets `topic_map.status` to `queued`. Preserves profile, pillars, phases. Client redirects to `/dashboard`.
+- **All modes** delete Phase 2 interview data first (mistake_journal → mock_interviews), then ProngGSD plan data (plan_tasks → plan_blocks → learning_plans → user_progress) — all in FK-safe order.
+- **`full` mode**: Deletes everything — progress_archive, cycles (cascades → units), plan data, phases (cascades → phase_weights), pillars (cascades → topic_map, phase_weights), mentor_conversations, onboarding_conversations, personal_notes, api_rate_limits, user_profile. Client redirects to `/onboarding`.
+- **`rewind` mode**: Owner-only (checked against `OWNER_EMAIL` env var, 403 if not owner). Deletes progress_archive, cycles (cascades → units), plan data, mentor_conversations, personal_notes, api_rate_limits. Resets `topic_map.status` to `queued`. Preserves profile, pillars, phases, onboarding_conversations. Client redirects to `/dashboard` → `/context-upload` (no plan). ContextUpload detects existing pillars and shows "Generate Plan" button to skip re-onboarding.
 - **`delete_account` mode**: Same full-data delete as `full`, then calls `admin.auth.admin.deleteUser(userId)` to remove the auth user. Client calls `supabase.auth.signOut()` and redirects to `/auth`.
 - **Env vars**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OWNER_EMAIL`
