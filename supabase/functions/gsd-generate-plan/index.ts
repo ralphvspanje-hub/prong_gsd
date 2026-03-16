@@ -50,7 +50,22 @@ const PACING_TONE: Record<string, string> = {
     'Relaxed and curiosity-driven. "Explore this when you feel like it."',
   intensive:
     'High-pressure sprint. "Interview is coming. Every hour counts. Do this NOW." No fluff.',
+  sprint:
+    'Focused and encouraging. "Deep dive time — master this before moving on." Celebrate depth over breadth.',
 };
+
+// Sprint unit counts based on time commitment
+const SPRINT_UNITS: Record<string, [number, number]> = {
+  light: [6, 8], // ~15-30min/day commitment
+  moderate: [8, 12], // ~60min/day
+  intensive: [10, 15], // ~90min+/day
+};
+
+function getSprintIntensity(dailyMinutes: number): string {
+  if (dailyMinutes <= 30) return "light";
+  if (dailyMinutes <= 60) return "moderate";
+  return "intensive";
+}
 
 // Maps pillar name keywords → curated_resources skill_area values
 const SKILL_AREA_MAP: Record<string, string[]> = {
@@ -534,6 +549,8 @@ interface BlockParams {
   difficultyAdjustment?: "harder" | "easier" | "same";
   feedbackContext?: string;
   planType?: "learning" | "interview_prep";
+  planFormat?: "weekly" | "sprint";
+  sprintUnitCount?: number;
 }
 
 async function generateBlock(
@@ -590,9 +607,14 @@ async function generateBlock(
 
   // For interview/crash course plans, always use intensive pacing
   const isInterviewPlan = params.planType === "interview_prep";
-  const pacingProfile = isInterviewPlan
-    ? "intensive"
-    : profile?.pacing_profile || "steady";
+  const isSprint = params.planFormat === "sprint";
+  const blockLabel = isSprint ? "sprint" : "week";
+  const unitLabel = isSprint ? "practice units" : "tasks";
+  const pacingProfile = isSprint
+    ? "sprint"
+    : isInterviewPlan
+      ? "intensive"
+      : profile?.pacing_profile || "steady";
   const dailyMinutes = isInterviewPlan
     ? profile.interview_intensity === "100_percent"
       ? profile?.hours_per_day
@@ -604,8 +626,21 @@ async function generateBlock(
   const minutesForThisPillar = Math.round(dailyMinutes / activePillars);
   const daysPerWeek =
     isInterviewPlan && profile?.days_per_week ? profile.days_per_week : 5;
-  const weeklyBudget = minutesForThisPillar * daysPerWeek;
-  const [minTasks, maxTasks] = PACING_TASKS[pacingProfile] || [3, 4];
+  const weeklyBudget = isSprint
+    ? minutesForThisPillar * 10 // Sprint budget: ~10 practice days
+    : minutesForThisPillar * daysPerWeek;
+
+  let minTasks: number, maxTasks: number;
+  if (isSprint && params.sprintUnitCount) {
+    // Sprint: use the unit count from the sprint outline
+    minTasks = params.sprintUnitCount;
+    maxTasks = params.sprintUnitCount;
+  } else if (isSprint) {
+    const intensity = getSprintIntensity(dailyMinutes);
+    [minTasks, maxTasks] = SPRINT_UNITS[intensity];
+  } else {
+    [minTasks, maxTasks] = PACING_TASKS[pacingProfile] || [3, 4];
+  }
 
   // Build resource list for prompt
   const resourceList =
@@ -623,10 +658,10 @@ async function generateBlock(
       ? prevBlocks
           .map(
             (b: any) =>
-              `- Week ${b.week_number}: ${b.title} — ${b.weekly_goal}`,
+              `- ${isSprint ? "Sprint" : "Week"} ${b.week_number}: ${b.title} — ${b.weekly_goal}`,
           )
           .join("\n")
-      : "First week for this pillar.";
+      : `First ${blockLabel} for this pillar.`;
 
   // Build tool_setup context for level 1 primers
   let setupContext = "";
@@ -659,14 +694,14 @@ async function generateBlock(
   }
 
   const firstBlockInstruction = isFirstBlock
-    ? `\n\nThis is the learner's FIRST week with the "${pillarName}" pillar. In context_brief, include:
+    ? `\n\nThis is the learner's FIRST ${blockLabel} with the "${pillarName}" pillar. In context_brief, include:
 - What this skill/pillar is about in plain language
 - Why it matters for their specific goals
 - Practical setup instructions if needed (based on their tool setup)
-- End with: "This primer is just context. The real learning happens when you start the tasks below."`
+- End with: "This primer is just context. The real learning happens when you start the ${unitLabel} below."`
     : "";
 
-  const systemPrompt = `You are ProngGSD, generating a detailed weekly plan block for a learner.
+  const systemPrompt = `You are ProngGSD, generating a detailed ${isSprint ? "sprint practice block" : "weekly plan block"} for a learner.
 
 LEARNER: ${pacingProfile} pacing, ${minutesForThisPillar} minutes/day for this pillar, level ${pillarLevel}/5
 PILLAR: ${pillarName} — ${pillar?.description || ""}
@@ -685,8 +720,8 @@ TONE: ${PACING_TONE[pacingProfile] || PACING_TONE.steady}
 ${setupContext}${firstBlockInstruction}${extraContext}${buildDifficultyContext(params)}
 
 TASK RULES:
-- Generate ${minTasks}–${maxTasks} tasks.
-- Weekly time budget is approximately ${weeklyBudget} minutes (${minutesForThisPillar} min/day, ${daysPerWeek} days/week), but this is a GUIDELINE — quality matters more than fitting a budget.
+- Generate ${minTasks === maxTasks ? `exactly ${minTasks}` : `${minTasks}–${maxTasks}`} ${unitLabel}.${isSprint ? `\n- This is a SPRINT block — each unit should be completable in one practice session (~${minutesForThisPillar} minutes). The learner does these at their own pace (1-2 per day).` : ""}
+- ${isSprint ? "Sprint" : "Weekly"} time budget is approximately ${weeklyBudget} minutes (${minutesForThisPillar} min/day${isSprint ? "" : `, ${daysPerWeek} days/week`}), but this is a GUIDELINE — quality matters more than fitting a budget.
 - Estimate each task INDIVIDUALLY based on what the resource actually requires:
   * YouTube videos/lectures: estimate the ACTUAL video length. A deep-dive lecture is 60–120 min, a tutorial 15–30 min. Do NOT compress to fit the daily budget.
   * Hands-on practice (drills, exercises, coding challenges): 20–60 min depending on complexity.
@@ -703,7 +738,7 @@ TASK RULES:
 - For conceptual, theory, or lecture-style tasks, generate YouTube-specific search queries (prefix with "youtube: "). E.g., "youtube: Stanford CS229 introduction to machine learning lecture" or "youtube: Andrej Karpathy LLM explained". Be specific — name known educators, universities, or channels when relevant to the topic.
 - For hands-on practice tasks, keep using platform-specific resources or general search queries.
 - The "why_text" should connect the task to their goals and explain the learning value.
-${pacingProfile === "intensive" ? '- PACING NOTE: Write a short motivational message about their deadline or goal. Focus on urgency and encouragement — reference their target company or role if known. Do NOT mention time budgets or minutes per day. Examples: "Your interview is around the corner — nail this block and you\'ll walk in confident.", "Every rep here is one less surprise in the real interview. Push through."' : "- PACING NOTE: Write a brief note about the learner's pace and what to focus on this week."}
+${pacingProfile === "intensive" ? '- PACING NOTE: Write a short motivational message about their deadline or goal. Focus on urgency and encouragement — reference their target company or role if known. Do NOT mention time budgets or minutes per day. Examples: "Your interview is around the corner — nail this block and you\'ll walk in confident.", "Every rep here is one less surprise in the real interview. Push through."' : pacingProfile === "sprint" ? '- PACING NOTE: Write an encouraging note about deep-diving into this pillar. Emphasize depth over breadth. Example: "This sprint is all about mastering the fundamentals — take your time with each unit and build real understanding."' : "- PACING NOTE: Write a brief note about the learner's pace and what to focus on this week."}
 
 Respond with ONLY valid JSON, no markdown fences, no commentary:
 {
@@ -736,7 +771,9 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
   "completion_criteria": "How to know when this block is done"
 }`;
 
-  const userPrompt = `Generate the week ${weekNumber} plan block for the "${pillarName}" pillar with the goal: "${weeklyGoal}"`;
+  const userPrompt = isSprint
+    ? `Generate the sprint ${weekNumber} practice block for the "${pillarName}" pillar with the goal: "${weeklyGoal}"`
+    : `Generate the week ${weekNumber} plan block for the "${pillarName}" pillar with the goal: "${weeklyGoal}"`;
 
   const maxTokens = getMaxTokens(minutesForThisPillar);
 
@@ -769,7 +806,9 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       plan_id: planId,
       pillar_id: pillarId,
       week_number: weekNumber,
-      title: block.title || `Week ${weekNumber} — ${pillarName}`,
+      title:
+        block.title ||
+        `${isSprint ? "Sprint" : "Week"} ${weekNumber} — ${pillarName}`,
       weekly_goal: block.weekly_goal || weeklyGoal,
       context_brief: block.context_brief || null,
       pacing_note: block.pacing_note || null,
@@ -1321,6 +1360,527 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
 }
 
 // ---------------------------------------------------------------------------
+// Sprint plan generation (focused iterative cycles)
+// ---------------------------------------------------------------------------
+
+async function generateSprintPlan(
+  supabase: any,
+  supabaseAdmin: any,
+  userId: string,
+  geminiApiKey: string,
+): Promise<{ plan_id: string; total_sprints: number; warnings: string[] }> {
+  const warnings: string[] = [];
+
+  // Fetch all context
+  const [profileRes, pillarsRes, phasesRes] = await Promise.all([
+    supabase
+      .from("user_profile")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("pillars")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .order("sort_order"),
+    supabase
+      .from("phases")
+      .select("*")
+      .eq("user_id", userId)
+      .order("sort_order"),
+  ]);
+
+  const profile = profileRes.data;
+  const pillars = pillarsRes.data || [];
+  const phases = phasesRes.data || [];
+
+  if (pillars.length === 0) {
+    throw Object.assign(
+      new Error("No pillars found. Complete onboarding first."),
+      { status: 400 },
+    );
+  }
+
+  // Fetch topic maps for all pillars
+  const pillarIds = pillars.map((p: any) => p.id);
+  const { data: topicMaps } = await supabase
+    .from("topic_map")
+    .select("*")
+    .in("pillar_id", pillarIds)
+    .order("priority_order");
+
+  const dailyMinutes = parseTimeCommitment(profile);
+  const sprintIntensity = getSprintIntensity(dailyMinutes);
+  const [minUnits, maxUnits] = SPRINT_UNITS[sprintIntensity];
+
+  // Build pillar summaries for AI
+  const pillarSummaries = pillars
+    .map((p: any) => {
+      const clusters = (topicMaps || []).filter(
+        (t: any) => t.pillar_id === p.id,
+      );
+      return `- ${p.name} (level ${p.current_level}/5): ${p.description || ""}
+    Topics: ${clusters.map((c: any) => `${c.cluster_name} [${c.subtopics?.join(", ") || ""}]`).join("; ")}`;
+    })
+    .join("\n");
+
+  const phaseSummary =
+    phases.length > 0
+      ? phases
+          .map(
+            (ph: any) =>
+              `- ${ph.name}: ${ph.goal || ""} (${ph.timeline_start} to ${ph.timeline_end})`,
+          )
+          .join("\n")
+      : "No phases defined.";
+
+  // Build optional context
+  let extraContext = "";
+  if (profile?.resume_text) {
+    extraContext += `\n\nRESUME CONTEXT:\n${profile.resume_text.slice(0, 3000)}`;
+  }
+  if (profile?.linkedin_context) {
+    extraContext += `\n\nLINKEDIN CONTEXT:\n${profile.linkedin_context.slice(0, 3000)}`;
+  }
+
+  const jobContext = profile?.job_situation
+    ? `Job situation: ${profile.job_situation}${profile.job_timeline_weeks ? `, deadline in ${profile.job_timeline_weeks} weeks` : ""}`
+    : "";
+
+  const systemPrompt = `You are ProngGSD, an AI learning sprint architect. You design focused, iterative learning sprints.
+
+CONCEPT: Instead of a rigid multi-week plan, the learner works in focused sprints. Each sprint concentrates on 1-2 pillars for deep learning. After completing a sprint, they review progress and pick the next focus area.
+
+LEARNER PROFILE:
+- Time commitment: ${dailyMinutes} minutes/day
+- ${jobContext || "No specific job deadline."}
+
+ALL PILLARS (the learner's full skill development goals):
+${pillarSummaries}
+
+PHASES:
+${phaseSummary}
+${extraContext}
+
+SPRINT PLAN RULES:
+- Design an arc of 3-5 sprints that progress the learner toward their career goal.
+- Sprint 1 should focus on 1-2 of the HIGHEST PRIORITY pillars (lowest level, most foundational).
+- Each sprint focuses on 1-2 pillars ONLY — this enables deep learning, not scattered surface coverage.
+- Provide a clear career_goal summary and explain WHY each pillar matters for that goal.
+- The arc shows the journey: which pillars are tackled when, building from foundations to mastery.
+- Sprint 1 must have detailed pillar goals. Future sprints need only themes and target outcomes.
+- Do NOT try to cover all pillars in every sprint. Rotate focus across sprints.
+- suggested_first_focus should name the 1-2 pillars for sprint 1.
+
+Respond with ONLY valid JSON, no markdown fences, no commentary:
+{
+  "career_goal": "One sentence describing the learner's career direction",
+  "pillar_rationale": {
+    "pillar_name": "Why this pillar matters for their career goal"
+  },
+  "arc": [
+    {
+      "sprint_number": 1,
+      "focus_pillars": ["Pillar Name"],
+      "theme": "Sprint theme",
+      "target_outcome": "What the learner should be able to do after this sprint"
+    }
+  ],
+  "current_sprint": {
+    "sprint_number": 1,
+    "focus_pillars": [
+      {
+        "pillar_name": "exact pillar name",
+        "sprint_goal": "specific goal for this pillar in this sprint",
+        "unit_count": ${Math.round((minUnits + maxUnits) / 2)},
+        "focus_areas": ["topic1", "topic2"]
+      }
+    ]
+  }
+}`;
+
+  const userPrompt =
+    "Generate the sprint learning plan for this learner. Pick the best 1-2 pillars to start with.";
+
+  let rawText = await callGemini(geminiApiKey, systemPrompt, userPrompt, 4000);
+  let sprintOutline: any;
+  try {
+    sprintOutline = parseJSON(rawText);
+  } catch {
+    rawText = await callGemini(
+      geminiApiKey,
+      systemPrompt +
+        "\n\nCRITICAL: Respond with raw JSON only. No markdown, no commentary, no code fences.",
+      userPrompt,
+      4000,
+    );
+    sprintOutline = parseJSON(rawText);
+  }
+
+  // Validate
+  if (
+    !sprintOutline.arc ||
+    !Array.isArray(sprintOutline.arc) ||
+    !sprintOutline.current_sprint
+  ) {
+    throw new Error("AI returned invalid sprint plan structure");
+  }
+
+  // Enrich current_sprint focus_pillars with pillar IDs
+  const focusPillars = sprintOutline.current_sprint.focus_pillars || [];
+  for (const fp of focusPillars) {
+    const matched = matchPillarByName(fp.pillar_name, pillars);
+    if (matched) {
+      fp.pillar_id = matched.id;
+    } else {
+      warnings.push(
+        `Sprint 1: pillar "${fp.pillar_name}" not found in DB, skipping.`,
+      );
+    }
+  }
+  sprintOutline.current_sprint.focus_pillars = focusPillars.filter(
+    (fp: any) => fp.pillar_id,
+  );
+
+  if (sprintOutline.current_sprint.focus_pillars.length === 0) {
+    throw new Error(
+      "AI sprint plan matched zero pillars to the user's actual pillars.",
+    );
+  }
+
+  // Add format marker
+  sprintOutline.format = "sprint";
+
+  // Deactivate any existing active learning plan
+  await supabaseAdmin
+    .from("learning_plans")
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .eq("plan_type", "learning");
+
+  // Insert new sprint plan
+  const { data: plan, error: planErr } = await supabaseAdmin
+    .from("learning_plans")
+    .insert({
+      user_id: userId,
+      total_weeks: null, // Open-ended for sprint plans
+      pacing_profile: profile?.pacing_profile || "steady",
+      plan_outline: sprintOutline,
+      is_active: true,
+      plan_type: "learning",
+      plan_format: "sprint",
+      sprint_started_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+
+  if (planErr) throw planErr;
+
+  // Generate sprint 1 blocks (1 per focus pillar)
+  const activePillarCount = sprintOutline.current_sprint.focus_pillars.length;
+
+  for (const fp of sprintOutline.current_sprint.focus_pillars) {
+    try {
+      await generateBlock(supabase, supabaseAdmin, geminiApiKey, {
+        userId,
+        planId: plan.id,
+        weekNumber: 1, // sprint_number stored as week_number
+        pillarId: fp.pillar_id,
+        pillarName: fp.pillar_name,
+        weeklyGoal: fp.sprint_goal,
+        profile,
+        activePillarCount,
+        planFormat: "sprint",
+        sprintUnitCount: fp.unit_count || Math.round((minUnits + maxUnits) / 2),
+      });
+    } catch (err: any) {
+      console.error(
+        `Sprint block gen failed for pillar ${fp.pillar_name}:`,
+        err,
+      );
+      warnings.push(
+        `Failed to generate sprint 1 block for "${fp.pillar_name}": ${err.message}`,
+      );
+    }
+  }
+
+  // Initialize user_progress (upsert)
+  const { data: existingProgress } = await supabaseAdmin
+    .from("user_progress")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existingProgress) {
+    await supabaseAdmin
+      .from("user_progress")
+      .update({
+        current_day: 1,
+        current_streak: 0,
+        total_tasks_completed: 0,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existingProgress.id);
+  } else {
+    await supabaseAdmin.from("user_progress").insert({
+      user_id: userId,
+      current_day: 1,
+      current_streak: 0,
+      longest_streak: 0,
+      total_tasks_completed: 0,
+    });
+  }
+
+  return {
+    plan_id: plan.id,
+    total_sprints: sprintOutline.arc.length,
+    warnings,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Next sprint generation (after sprint check-in)
+// ---------------------------------------------------------------------------
+
+async function generateNextSprint(
+  supabase: any,
+  supabaseAdmin: any,
+  userId: string,
+  geminiApiKey: string,
+  planId: string,
+  sprintNumber: number,
+  checkinSummary: any,
+  focusPillarNames: string[],
+): Promise<{ block_ids: string[]; warnings: string[] }> {
+  const warnings: string[] = [];
+
+  // Fetch plan + pillars + profile
+  const [planRes, pillarsRes, profileRes] = await Promise.all([
+    supabase
+      .from("learning_plans")
+      .select("*")
+      .eq("id", planId)
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("pillars")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .order("sort_order"),
+    supabase
+      .from("user_profile")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle(),
+  ]);
+
+  const plan = planRes.data;
+  if (!plan) throw Object.assign(new Error("Plan not found"), { status: 400 });
+
+  const pillars = pillarsRes.data || [];
+  const profile = profileRes.data;
+
+  // Fetch topic maps
+  const pillarIds = pillars.map((p: any) => p.id);
+  const { data: topicMaps } = await supabase
+    .from("topic_map")
+    .select("*")
+    .in("pillar_id", pillarIds)
+    .order("priority_order");
+
+  // Fetch completed blocks for continuity
+  const { data: completedBlocks } = await supabase
+    .from("plan_blocks")
+    .select("pillar_id, week_number, title, weekly_goal, checkin_feedback")
+    .eq("plan_id", planId)
+    .eq("is_completed", true)
+    .order("week_number");
+
+  const dailyMinutes = parseTimeCommitment(profile);
+  const sprintIntensity = getSprintIntensity(dailyMinutes);
+  const [minUnits, maxUnits] = SPRINT_UNITS[sprintIntensity];
+
+  // Match focus pillar names to actual pillars
+  const focusPillars = focusPillarNames
+    .map((name) => matchPillarByName(name, pillars))
+    .filter((p: any) => p !== null);
+
+  if (focusPillars.length === 0) {
+    throw Object.assign(
+      new Error("No valid focus pillars selected for next sprint"),
+      { status: 400 },
+    );
+  }
+
+  const outline = plan.plan_outline as any;
+  const nextSprintNumber = sprintNumber + 1;
+
+  const pillarSummaries = pillars
+    .map((p: any) => {
+      const clusters = (topicMaps || []).filter(
+        (t: any) => t.pillar_id === p.id,
+      );
+      return `- ${p.name} (level ${p.current_level}/5): ${p.description || ""}
+    Topics: ${clusters.map((c: any) => `${c.cluster_name} [${c.subtopics?.join(", ") || ""}]`).join("; ")}`;
+    })
+    .join("\n");
+
+  const completedSummary = (completedBlocks || [])
+    .map((b: any) => {
+      const feedback = b.checkin_feedback?.difficulty
+        ? ` (rated: ${b.checkin_feedback.difficulty})`
+        : "";
+      return `- Sprint ${b.week_number}, ${b.title}${feedback}`;
+    })
+    .join("\n");
+
+  const systemPrompt = `You are ProngGSD, generating the next sprint in a focused learning plan.
+
+CAREER GOAL: ${outline.career_goal || "Career development"}
+SPRINT CHECK-IN SUMMARY: ${JSON.stringify(checkinSummary)}
+
+SELECTED FOCUS PILLARS FOR NEXT SPRINT: ${focusPillars.map((p: any) => p.name).join(", ")}
+
+ALL PILLARS:
+${pillarSummaries}
+
+COMPLETED SPRINT HISTORY:
+${completedSummary || "No previous sprints completed."}
+
+CURRENT ARC:
+${JSON.stringify(outline.arc || [])}
+
+Generate sprint ${nextSprintNumber} details for the selected focus pillars. Also update the learning arc if needed based on progress.
+
+RULES:
+- Generate detailed goals for each focus pillar (1-2 pillars max)
+- Each pillar gets ${minUnits}-${maxUnits} practice units
+- Units should build on what was completed before
+- Update the arc to reflect current progress and any adjustments
+
+Respond with ONLY valid JSON, no markdown fences:
+{
+  "updated_arc": [
+    {
+      "sprint_number": 1,
+      "focus_pillars": ["Pillar"],
+      "theme": "Theme",
+      "target_outcome": "Outcome"
+    }
+  ],
+  "current_sprint": {
+    "sprint_number": ${nextSprintNumber},
+    "focus_pillars": [
+      {
+        "pillar_name": "exact pillar name",
+        "sprint_goal": "specific goal",
+        "unit_count": ${Math.round((minUnits + maxUnits) / 2)},
+        "focus_areas": ["topic1", "topic2"]
+      }
+    ]
+  }
+}`;
+
+  const userPrompt = `Generate sprint ${nextSprintNumber} for focus pillars: ${focusPillars.map((p: any) => p.name).join(", ")}`;
+
+  let rawText = await callGemini(geminiApiKey, systemPrompt, userPrompt, 3000);
+  let result: any;
+  try {
+    result = parseJSON(rawText);
+  } catch {
+    rawText = await callGemini(
+      geminiApiKey,
+      systemPrompt +
+        "\n\nCRITICAL: Respond with raw JSON only. No markdown, no commentary, no code fences.",
+      userPrompt,
+      3000,
+    );
+    result = parseJSON(rawText);
+  }
+
+  // Enrich with pillar IDs
+  const sprintFocusPillars = result.current_sprint?.focus_pillars || [];
+  for (const fp of sprintFocusPillars) {
+    const matched = matchPillarByName(fp.pillar_name, pillars);
+    if (matched) {
+      fp.pillar_id = matched.id;
+    } else {
+      warnings.push(
+        `Sprint ${nextSprintNumber}: pillar "${fp.pillar_name}" not found, skipping.`,
+      );
+    }
+  }
+  result.current_sprint.focus_pillars = sprintFocusPillars.filter(
+    (fp: any) => fp.pillar_id,
+  );
+
+  if (result.current_sprint.focus_pillars.length === 0) {
+    throw new Error("No valid pillars matched for next sprint.");
+  }
+
+  // Update plan outline
+  const updatedOutline = {
+    ...outline,
+    arc: result.updated_arc || outline.arc,
+    current_sprint: result.current_sprint,
+  };
+
+  await supabaseAdmin
+    .from("learning_plans")
+    .update({
+      plan_outline: updatedOutline,
+      sprint_started_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", planId);
+
+  // Generate blocks for the new sprint
+  const blockIds: string[] = [];
+  const activePillarCount = result.current_sprint.focus_pillars.length;
+
+  for (const fp of result.current_sprint.focus_pillars) {
+    try {
+      const blockResult = await generateBlock(
+        supabase,
+        supabaseAdmin,
+        geminiApiKey,
+        {
+          userId,
+          planId,
+          weekNumber: nextSprintNumber, // sprint_number stored as week_number
+          pillarId: fp.pillar_id,
+          pillarName: fp.pillar_name,
+          weeklyGoal: fp.sprint_goal,
+          profile,
+          activePillarCount,
+          planFormat: "sprint",
+          sprintUnitCount:
+            fp.unit_count || Math.round((minUnits + maxUnits) / 2),
+          difficultyAdjustment:
+            checkinSummary?.difficulty_signals?.[fp.pillar_name] === "harder"
+              ? "harder"
+              : checkinSummary?.difficulty_signals?.[fp.pillar_name] ===
+                  "easier"
+                ? "easier"
+                : "same",
+        },
+      );
+      blockIds.push(blockResult.block_id);
+    } catch (err: any) {
+      console.error(`Next sprint block gen failed for ${fp.pillar_name}:`, err);
+      warnings.push(
+        `Failed to generate sprint ${nextSprintNumber} block for "${fp.pillar_name}": ${err.message}`,
+      );
+    }
+  }
+
+  return { block_ids: blockIds, warnings };
+}
+
+// ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
 
@@ -1475,10 +2035,53 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (mode === "sprint_plan") {
+      const result = await generateSprintPlan(
+        supabase,
+        supabaseAdmin,
+        userId,
+        geminiApiKey,
+      );
+      return jsonRes({
+        success: true,
+        plan_id: result.plan_id,
+        total_sprints: result.total_sprints,
+        warnings: result.warnings.length > 0 ? result.warnings : undefined,
+      });
+    }
+
+    if (mode === "next_sprint") {
+      const { plan_id, sprint_number, checkin_summary, focus_pillars } = body;
+      if (!plan_id || !sprint_number || !focus_pillars) {
+        return jsonRes(
+          {
+            error:
+              "plan_id, sprint_number, and focus_pillars are required for next_sprint mode",
+          },
+          400,
+        );
+      }
+      const result = await generateNextSprint(
+        supabase,
+        supabaseAdmin,
+        userId,
+        geminiApiKey,
+        plan_id,
+        sprint_number,
+        checkin_summary || {},
+        focus_pillars,
+      );
+      return jsonRes({
+        success: true,
+        block_ids: result.block_ids,
+        warnings: result.warnings.length > 0 ? result.warnings : undefined,
+      });
+    }
+
     return jsonRes(
       {
         error:
-          "Invalid mode. Must be: full_plan, plan_block, extend_plan, interview_plan",
+          "Invalid mode. Must be: full_plan, plan_block, extend_plan, interview_plan, sprint_plan, next_sprint",
       },
       400,
     );

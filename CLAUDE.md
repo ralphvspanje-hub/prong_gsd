@@ -4,7 +4,7 @@
 
 ProngGSD ("Get Shit Done") is an AI-powered learning orchestrator, forked from DailyProng. Instead of generating learning content directly, it builds personalized multi-week plans that route users to the best external platforms for each skill, with task tracking and pacing adaptation. Users complete a structured AI onboarding, then follow a plan of daily tasks with external resources. An AI mentor provides ongoing career guidance and can restructure the plan. Dark/light theme.
 
-**Status:** Phase 9.5 (Crash Course Mode) in progress. Generalized interview prep into a "Crash Course" concept supporting any intensive short-term goal. Header button entry point, type selector at `/crash-course`, generic onboarding at `/crashcourse-onboarding`, unified dashboard at `/crash-course/:planId`. Max 3 concurrent crash courses. Phase 9.4 complete: separate interview prep dashboard. Phase 9.3: main onboarding detects interview focus. Phase 9.2: AI mock interviews. Phase 9.1: parallel interview prep. Phase 8 (Polish and Launch Prep) complete. See `IMPLEMENTATION_DOC_LEARNING_ORCHESTRATOR.md` for the full vision.
+**Status:** Phase 10 (Sprint Redesign) in progress. Replaced rigid 8-16 week learning plans with iterative focused sprint cycles. Each sprint concentrates on 1-2 pillars with ~10 practice units, completion-based (no calendar deadline). AI-facilitated check-in conversation between sprints suggests next focus area. New `sprint_checkins` table, new `gsd-sprint-checkin` edge function, new `/sprint-checkin` page. Sprint is default for all new learning plans. Weekly format is legacy (no migration needed). Phase 9.5 (Crash Course Mode) complete. See `IMPLEMENTATION_DOC_LEARNING_ORCHESTRATOR.md` for the full vision.
 
 ## Tech Stack
 
@@ -47,6 +47,7 @@ prong_gsd/
 │       ├── gsd-mock-interview/      # AI mock interview sessions (start/continue/complete)
 │       ├── gsd-onboarding-chat/     # AI onboarding conversation
 │       ├── gsd-process-checkin/     # Task/block completion, streak, pacing, pillar leveling
+│       ├── gsd-sprint-checkin/      # AI sprint check-in conversation (start/continue)
 │       └── gsd-reset-user-data/     # Destructive data reset
 └── package.json
 ```
@@ -89,7 +90,17 @@ Each subfolder has its own `CLAUDE.md`. Read it when working in that folder.
 | **mock_interviews** | AI mock interview sessions with conversation history | user_id scoped |
 | **mistake_journal** | Post-mock mistake tracking (timebox method)          | user_id scoped |
 
+### Sprint tables (Phase 10)
+
+| Table               | Purpose                                       | RLS            |
+| ------------------- | --------------------------------------------- | -------------- |
+| **sprint_checkins** | AI sprint check-in conversations with summary | user_id scoped |
+
 ### New columns on learning_plans
+
+`plan_format` — `'weekly'` (default/legacy) or `'sprint'` (new default). Sprint plans use iterative focused cycles.
+
+`sprint_started_at` — When the current sprint began. Reset at each new sprint start.
 
 `plan_type` — `'learning'` (default) or `'interview_prep'`. Both can be `is_active = true` simultaneously.
 
@@ -154,6 +165,7 @@ Everything in `src/components/ui/` is a shadcn/ui primitive. Add new ones via th
 | `/context-upload`         | ContextUpload         | Protected | Resume/LinkedIn PDF upload before onboarding (optional, skippable). Redirects to `/dashboard` if plan exists. If pillars exist but no plan (post-rewind), shows "Generate Plan" button to skip onboarding. |
 | `/onboarding`             | Onboarding            | Protected | AI onboarding chat                                                                                                                                                                                         |
 | `/interview-onboarding`   | InterviewOnboarding   | Protected | Interview prep mini-onboarding (3-4 turns). Redirects to `/crash-course/:planId` on completion.                                                                                                            |
+| `/sprint-checkin`         | SprintCheckin         | Protected | AI sprint check-in conversation + pillar selection for next sprint. Chat phase → review phase with pillar picker → next sprint generation.                                                                 |
 | `/mock-interview/:id`     | MockInterview         | Protected | AI mock interview chat + feedback + mistake journal                                                                                                                                                        |
 | `/progress`               | Progress              | Protected | Plan-based progress: stats, streak + heatmap, weekly/pillar charts (Recharts), pillar levels, plan summary                                                                                                 |
 | `/history`                | History               | Protected | Plan blocks with tasks, searchable/filterable by pillar and week                                                                                                                                           |
@@ -238,6 +250,16 @@ Edge function env vars (set in Supabase dashboard):
 - Phase 9.5: Mentor.tsx has 3 quick action sets: `LEARNING_QUICK_ACTIONS`, `INTERVIEW_QUICK_ACTIONS`, `GENERIC_CRASHCOURSE_QUICK_ACTIONS`. Selection based on localStorage `pronggsd-dashboard-view` + `pronggsd-crashcourse-type`.
 - Phase 9.5: InterviewOnboarding.tsx now redirects to `/crash-course/:planId` (not `/interview-dashboard`) and passes `crashcourse_type: "interview"` to plan generation.
 - Phase 9.5: `learning_plans.crashcourse_type` column: `'interview'` or `'generic'` for crash courses, null for learning plans. All crash courses still use `plan_type: 'interview_prep'`.
+- Phase 10: Sprint system replaces weekly plans as the default for new learning plans. `plan_format` column: `'weekly'` (legacy) or `'sprint'` (new default). Sprint plans use `total_weeks: null` (open-ended), `sprint_started_at` tracks current sprint start.
+- Phase 10: Sprint plans reuse `plan_blocks.week_number` as `sprint_number` — no schema change. All existing queries work because they treat week_number as a sequential grouping key.
+- Phase 10: Sprints are completion-based, no calendar deadline. Each sprint focuses on 1-2 pillars (deep dive). AI suggests next focus at check-in.
+- Phase 10: `gsd-generate-plan` has six modes: `full_plan`, `plan_block`, `extend_plan`, `interview_plan`, `sprint_plan`, `next_sprint`.
+- Phase 10: `gsd-process-checkin` returns `sprint_checkin_pending: true` when all sprint blocks are done. Dashboard shows check-in prompt instead of auto-generating next blocks.
+- Phase 10: For sprint plans, Dashboard auto-fires `block_complete` when all tasks are checked (no CheckinModal). CheckinModal only shows for legacy weekly plans.
+- Phase 10: SprintCheckin.tsx at `/sprint-checkin` — AI chat (3-5 turns) → review phase with pillar selection → "Start Next Sprint" calls `next_sprint` mode.
+- Phase 10: `sprint_checkins` table stores multi-turn conversations. `gsd-sprint-checkin` edge function with start/continue actions (same pattern as `gsd-mock-interview`).
+- Phase 10: `gsd-reset-user-data` deletes `sprint_checkins` before `learning_plans` (FK order).
+- Phase 10: Onboarding.tsx and ContextUpload.tsx call `sprint_plan` mode instead of `full_plan` for new learning plans.
 
 ---
 

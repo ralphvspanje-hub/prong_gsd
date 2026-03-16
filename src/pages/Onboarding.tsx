@@ -324,12 +324,12 @@ const Onboarding = () => {
         .update({ status: "completed" })
         .eq("user_id", user.id);
 
-      // Generate the multi-week learning plan
-      setSavingMessage("Building your personalized plan...");
+      // Generate the sprint-based learning plan
+      setSavingMessage("Building your personalized sprint plan...");
       const { error: planError } = await supabase.functions.invoke(
         "gsd-generate-plan",
         {
-          body: { mode: "full_plan" },
+          body: { mode: "sprint_plan" },
         },
       );
 

@@ -4,10 +4,10 @@
 
 Shared Deno modules imported by multiple edge functions.
 
-| Module         | Export           | Used by                                                           |
-| -------------- | ---------------- | ----------------------------------------------------------------- |
-| `rateLimit.ts` | `checkRateLimit` | mentor-chat, generate-plan, onboarding-chat, interview-onboarding |
-| `cors.ts`      | `getCorsHeaders` | all 7 functions                                                   |
+| Module         | Export           | Used by                                                                           |
+| -------------- | ---------------- | --------------------------------------------------------------------------------- |
+| `rateLimit.ts` | `checkRateLimit` | mentor-chat, generate-plan, onboarding-chat, interview-onboarding, sprint-checkin |
+| `cors.ts`      | `getCorsHeaders` | all functions                                                                     |
 
 Rate limits: 50 calls/user/day (500 for owner via `OWNER_EMAIL` env var), 100 calls/IP/day per endpoint. Auto-cleans rows older than 48h from `api_rate_limits`.
 
@@ -76,13 +76,15 @@ Generates multi-week learning plans, individual plan blocks, and plan extensions
 | `plan_block`     | `{ mode: "plan_block", plan_id, week_number, pillar_id, weekly_goal, active_pillar_count?, difficulty_adjustment?, feedback_context? }` | Fetches pillar context, curated resources (keyword-matched), previous blocks → Gemini generates detailed block with tasks → stores in `plan_blocks` + `plan_tasks`. Optional `difficulty_adjustment` ("harder"/"easier"/"same") and `feedback_context` (user feedback string) are injected into the AI prompt to adapt difficulty. Returns `{ success, block_id }`                                                                      |
 | `extend_plan`    | `{ mode: "extend_plan", plan_id, additional_weeks }`                                                                                    | Fetches existing plan outline + completed blocks with feedback → Gemini generates additional week outlines continuing from where the user left off → appends to `plan_outline`, updates `total_weeks` → generates first new week's blocks. Returns `{ success, new_total_weeks }`                                                                                                                                                       |
 | `interview_plan` | `{ mode: "interview_plan" }`                                                                                                            | Fetches interview context from user_profile + interview-specific pillars → Gemini generates 1-3 week intensive outline → stores in `learning_plans` with `plan_type: 'interview_prep'` → generates ALL weeks' blocks immediately (short plan needs full visibility). Only deactivates other `interview_prep` plans, NOT `learning` plans. Pacing: `intensive` (5-8 tasks/block). Returns `{ success, plan_id, total_weeks, warnings? }` |
+| `sprint_plan`    | `{ mode: "sprint_plan" }`                                                                                                               | Phase 10: Fetches profile, pillars, phases, topic maps → Gemini generates career goal + sprint arc (3-5 sprints) + detailed sprint 1 with 1-2 focus pillars → stores in `learning_plans` with `plan_format: 'sprint'`, `total_weeks: null` → generates sprint 1 blocks. Returns `{ success, plan_id, total_sprints, warnings? }`                                                                                                        |
+| `next_sprint`    | `{ mode: "next_sprint", plan_id, sprint_number, checkin_summary?, focus_pillars }`                                                      | Phase 10: Called after sprint check-in. Generates updated arc + next sprint detail for chosen focus pillars → updates `plan_outline` and `sprint_started_at` → generates blocks. Returns `{ success, block_ids, warnings? }`                                                                                                                                                                                                            |
 
 - **Resource matching**: Static keyword map from pillar name → `curated_resources.skill_area` values, filtered by level. Falls back to AI-generated search queries when no curated resources match.
 - **Level 1 primers**: When pillar level is 1, context_brief includes setup instructions based on `user_profile.tool_setup` flags.
 - **New pillar intros**: First block for any pillar includes a pillar introduction in context_brief.
 - **Pacing profiles**: aggressive (4-6 tasks, urgent tone), steady (3-4 tasks, encouraging), exploratory (2-3 tasks, relaxed). Time estimates split across active pillars.
 - **Re-onboarding**: Deactivates old active plan before creating new one.
-- **Triggered from**: `Onboarding.tsx` `handleConfirm()` (full_plan), `Dashboard.tsx` `handleCheckinSubmit()` (plan_block with difficulty params), `Dashboard.tsx` `handleExtendPlan()` (extend_plan).
+- **Triggered from**: `Onboarding.tsx` `handleConfirm()` (sprint_plan), `ContextUpload.tsx` `handleGeneratePlan()` (sprint_plan), `Dashboard.tsx` `handleCheckinSubmit()` (plan_block with difficulty params), `Dashboard.tsx` `handleExtendPlan()` (extend_plan), `SprintCheckin.tsx` `handleStartNextSprint()` (next_sprint).
 
 ## onboarding-chat
 
@@ -172,6 +174,29 @@ Handles task completion analysis, streak tracking, pacing detection, pillar leve
 - **block_complete**: Marks block completed with `checkin_feedback`, handles pillar leveling (threshold-based with acceleration/deceleration from consecutive feedback), generates difficulty adjustment signal for next block, detects plan completion and near-end for exploratory plans.
 - **Pillar leveling thresholds** (configurable constants): L1→2: 2 blocks, L2→3: 2, L3→4: 3, L4→5: 3. Two consecutive "too_easy" → immediate level up. Two consecutive "too_hard" → prevent level up.
 - **Frontend integration**: `task_complete` is fire-and-forget (non-blocking). `block_complete` is awaited (response drives next-block generation and level-up toasts).
+- **Sprint awareness (Phase 10)**: When `plan.plan_format === 'sprint'` and all blocks are done, returns `sprint_checkin_pending: true` + `sprint_number` instead of `next_block.should_generate`. Dashboard redirects to `/sprint-checkin`. Pacing detection uses 10-day window instead of 7 for sprint plans.
+
+## sprint-checkin
+
+AI-facilitated sprint check-in conversation between sprints. Phase 10 addition.
+
+- **Auth**: Bearer JWT → `supabase.auth.getUser()` for user ID
+- **Rate limits**: 50 calls/user/day, 100 calls/IP/day
+- **Env vars**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`
+- **AI model**: `gemini-3.1-flash-lite` via Google Generative AI REST API
+- **DB writes**: Yes — uses `supabaseAdmin`. Creates and updates `sprint_checkins` rows. Applies pillar level adjustments on completion.
+
+| Action     | Input                                         | Returns                                                              |
+| ---------- | --------------------------------------------- | -------------------------------------------------------------------- |
+| `start`    | `{ action: "start", plan_id }`                | `{ checkin_id, message, messages, sprint_number }` — creates session |
+| `continue` | `{ action: "continue", checkin_id, message }` | `{ message, messages, completed, summary?, suggested_pillars? }`     |
+
+- **Conversation flow**: AI reflects on sprint completion data → asks about experience → recommends 1-2 pillars for next sprint → emits `[CHECKIN_COMPLETE]...JSON...[/CHECKIN_COMPLETE]`
+- **Completion detection**: Parses `[CHECKIN_COMPLETE]` tag (same pattern as mock-interview). After 4+ user turns, system prompt hints to wrap up.
+- **Summary JSON shape**: `{ sprint_review, difficulty_signals: {pillar: "harder"|"easier"|"same"}, suggested_focus: [{pillar_name, reason}], pacing_note }`
+- **On completion**: Applies pillar level adjustments (harder → level up, easier → level down), updates `sprint_checkins.status = 'completed'`, stores `ai_summary`
+- **Resume support**: `start` action checks for existing in-progress checkin and returns its messages if found
+- **Triggered from**: `SprintCheckin.tsx` (start on mount, continue on each user message)
 
 ## reset-user-data
 

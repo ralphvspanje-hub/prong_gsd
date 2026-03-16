@@ -254,13 +254,11 @@ Deno.serve(async (req) => {
 
     if (plan) {
       planIdSection = `PLAN ID: ${plan.id}`;
-      const outline = plan.plan_outline as {
-        total_weeks: number;
-        weeks: PlanOutlineWeek[];
-      } | null;
-      const outlineWeeks = outline?.weeks || [];
+      const isSprint = (plan as any).plan_format === "sprint";
+      const unitLabel = isSprint ? "Sprint" : "Week";
+      const outline = plan.plan_outline as any;
 
-      // Determine current week
+      // Determine current week/sprint
       const uncompletedBlocks = allBlocks.filter((b: any) => !b.is_completed);
       const completedWeeks = new Set(
         allBlocks
@@ -272,24 +270,47 @@ Deno.serve(async (req) => {
           ? Math.min(...uncompletedBlocks.map((b: any) => b.week_number))
           : null;
 
-      // Summarize plan outline
-      const outlineSummary = outlineWeeks
-        .map((w: PlanOutlineWeek) => {
-          const pillarNames = w.pillars.map((p) => p.pillar_name).join(" + ");
-          const weekNum = w.week_number;
-          let status = "";
-          if (completedWeeks.has(weekNum)) status = " (done)";
-          else if (weekNum === currentWeek) status = " (current)";
-          return `  Week ${weekNum}: ${pillarNames}${status}`;
-        })
-        .join("\n");
+      if (isSprint) {
+        // Sprint format: show arc + career goal
+        const arc = outline?.arc || [];
+        const arcSummary = arc
+          .map((s: any) => {
+            const num = s.sprint_number;
+            let status = "";
+            if (completedWeeks.has(num)) status = " (done)";
+            else if (num === currentWeek) status = " (current)";
+            return `  Sprint ${num}: ${s.focus_pillars?.join(" + ") || s.theme || ""}${status}`;
+          })
+          .join("\n");
 
-      const weeksRemaining =
-        currentWeek !== null ? plan.total_weeks - currentWeek + 1 : 0;
+        planSection = `Plan format: Sprint (focused iterative cycles)
+Career goal: ${outline?.career_goal || "Not set"}
+Current sprint: ${currentWeek ?? "all done"}, Pacing: ${plan.pacing_profile}
+Sprint arc:
+${arcSummary || "  (empty)"}`;
+      } else {
+        // Weekly format: existing behavior
+        const outlineWeeks = outline?.weeks || [];
+        const outlineSummary = outlineWeeks
+          .map((w: PlanOutlineWeek) => {
+            const pillarNames = w.pillars
+              .map((p: any) => p.pillar_name)
+              .join(" + ");
+            const weekNum = w.week_number;
+            let status = "";
+            if (completedWeeks.has(weekNum)) status = " (done)";
+            else if (weekNum === currentWeek) status = " (current)";
+            return `  Week ${weekNum}: ${pillarNames}${status}`;
+          })
+          .join("\n");
 
-      planSection = `Total weeks: ${plan.total_weeks}, Current week: ${currentWeek ?? "all done"}, Weeks remaining: ${weeksRemaining}, Pacing: ${plan.pacing_profile}
+        const weeksRemaining =
+          currentWeek !== null ? plan.total_weeks - currentWeek + 1 : 0;
+
+        planSection = `Total weeks: ${plan.total_weeks}, Current week: ${currentWeek ?? "all done"}, Weeks remaining: ${weeksRemaining}, Pacing: ${plan.pacing_profile}
 Plan outline:
 ${outlineSummary || "  (empty)"}`;
+      }
 
       // Current week status
       if (currentWeek !== null) {

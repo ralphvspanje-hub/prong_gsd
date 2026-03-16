@@ -12,7 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Zap, Loader2, ArrowRight } from "lucide-react";
+import { Zap, Loader2, ArrowRight, PartyPopper } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Tables } from "@/integrations/supabase/types";
@@ -66,6 +66,7 @@ const Dashboard = () => {
   const [showExtendPrompt, setShowExtendPrompt] = useState(false);
   const [isExtending, setIsExtending] = useState(false);
   const [blockPollCount, setBlockPollCount] = useState(0);
+  const [sprintCheckinPending, setSprintCheckinPending] = useState(false);
 
   // ---- Queries ----
 
@@ -180,6 +181,7 @@ const Dashboard = () => {
 
   // ---- Derived state ----
 
+  const isSprint = (plan as any)?.plan_format === "sprint";
   const outline = plan?.plan_outline as unknown as PlanOutline | null;
   const currentWeekNumber = currentBlocks?.[0]?.week_number;
 
@@ -244,16 +246,33 @@ const Dashboard = () => {
           .invoke("gsd-process-checkin", {
             body: { event_type: "task_complete", task_id: taskId },
           })
-          .then(({ data }) => {
+          .then(async ({ data }) => {
             if (data) {
               queryClient.invalidateQueries({
                 queryKey: ["user-progress", userId],
               });
               if (data.block_auto_complete && data.block_id) {
-                const block = currentBlocks?.find(
-                  (b) => b.id === data.block_id,
-                );
-                if (block) setCheckinBlock(block);
+                if (isSprint) {
+                  // Sprint plans: auto-complete block without modal
+                  const { data: checkinResult } =
+                    await supabase.functions.invoke("gsd-process-checkin", {
+                      body: {
+                        event_type: "block_complete",
+                        block_id: data.block_id,
+                      },
+                    });
+                  if (checkinResult?.sprint_checkin_pending) {
+                    setSprintCheckinPending(true);
+                  }
+                  queryClient.invalidateQueries({
+                    queryKey: ["plan-blocks-current", plan?.id],
+                  });
+                } else {
+                  const block = currentBlocks?.find(
+                    (b) => b.id === data.block_id,
+                  );
+                  if (block) setCheckinBlock(block);
+                }
               }
               if (data.gap_return) {
                 toast("Welcome back! Your streak starts fresh today.");
@@ -450,7 +469,7 @@ const Dashboard = () => {
             <>
               <Loader2 className="h-8 w-8 animate-spin text-accent" />
               <p className="text-sm text-muted-foreground">
-                Generating your first week...
+                Generating your first {isSprint ? "sprint" : "week"}...
               </p>
             </>
           )}
@@ -459,7 +478,32 @@ const Dashboard = () => {
     );
   }
 
-  // Plan complete
+  // Sprint check-in pending — all sprint blocks done, time for check-in
+  if ((isPlanComplete && isSprint) || sprintCheckinPending) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center py-32 gap-4 text-center">
+          <PartyPopper className="h-10 w-10 text-accent" />
+          <h1 className="font-serif text-2xl font-bold">
+            Sprint{" "}
+            {currentWeekNumber ||
+              (outline as any)?.current_sprint?.sprint_number ||
+              1}{" "}
+            complete!
+          </h1>
+          <p className="text-sm text-muted-foreground max-w-md">
+            Great work finishing your practice units. Time for a quick check-in
+            to review your progress and plan your next focus area.
+          </p>
+          <Button className="mt-2" onClick={() => navigate("/sprint-checkin")}>
+            Start Check-in
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
+
+  // Plan complete (weekly plans only)
   if (isPlanComplete && outline) {
     return (
       <Layout>
@@ -542,11 +586,12 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Weekly goal card */}
+        {/* Weekly/Sprint goal card */}
         {currentWeekNumber && pillarGoals.length > 0 && (
           <WeeklyGoalCard
             weekNumber={currentWeekNumber}
             pillarGoals={pillarGoals}
+            label={isSprint ? "Sprint" : undefined}
           />
         )}
 
@@ -572,8 +617,8 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Check-in modal */}
-      {checkinBlock && (
+      {/* Check-in modal (weekly plans only — sprint plans auto-complete) */}
+      {checkinBlock && !isSprint && (
         <CheckinModal
           open={!!checkinBlock}
           onOpenChange={(open) => {

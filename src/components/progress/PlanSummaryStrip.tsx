@@ -6,13 +6,17 @@ import { ArrowRight, Check, Play, Circle } from "lucide-react";
 
 interface PlanOutline {
   total_weeks: number;
-  weeks: { week_number: number; pillars: { pillar_name: string; weekly_goal: string }[] }[];
+  weeks: {
+    week_number: number;
+    pillars: { pillar_name: string; weekly_goal: string }[];
+  }[];
 }
 
 interface PlanSummaryStripProps {
   planOutline: PlanOutline;
   pacingProfile: string;
   allBlocks: { week_number: number; is_completed: boolean }[];
+  planFormat?: string;
 }
 
 const PACING_LABELS: Record<string, string> = {
@@ -31,7 +35,9 @@ export const PlanSummaryStrip = ({
   planOutline,
   pacingProfile,
   allBlocks,
+  planFormat,
 }: PlanSummaryStripProps) => {
+  const isSprint = planFormat === "sprint";
   const weekStatuses = useMemo(() => {
     const weekBlockMap = new Map<number, boolean[]>();
     for (const b of allBlocks) {
@@ -62,7 +68,9 @@ export const PlanSummaryStrip = ({
       if (status === "current") return week;
     }
     // All done or no blocks generated yet
-    return allBlocks.length > 0 ? Math.max(...allBlocks.map((b) => b.week_number)) : 1;
+    return allBlocks.length > 0
+      ? Math.max(...allBlocks.map((b) => b.week_number))
+      : 1;
   }, [weekStatuses, allBlocks]);
 
   return (
@@ -70,11 +78,16 @@ export const PlanSummaryStrip = ({
       <div className="flex items-center justify-between">
         <h2 className="font-serif text-lg font-semibold">Your Plan</h2>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className={PACING_COLORS[pacingProfile] || ""}>
+          <Badge
+            variant="outline"
+            className={PACING_COLORS[pacingProfile] || ""}
+          >
             {PACING_LABELS[pacingProfile] || pacingProfile}
           </Badge>
           <span className="text-sm text-muted-foreground">
-            Week {currentWeek} of {planOutline.total_weeks}
+            {isSprint
+              ? `Sprint ${currentWeek}`
+              : `Week ${currentWeek} of ${planOutline.total_weeks}`}
           </span>
         </div>
       </div>
@@ -110,7 +123,11 @@ export const PlanSummaryStrip = ({
       </div>
 
       <Link to="/plan">
-        <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground -ml-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1 text-muted-foreground -ml-2"
+        >
           View full plan <ArrowRight className="h-3.5 w-3.5" />
         </Button>
       </Link>

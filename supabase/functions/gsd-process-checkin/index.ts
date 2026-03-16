@@ -123,14 +123,16 @@ async function handleTaskComplete(
   // Read back authoritative values
   const { data: updatedProgress } = await supabaseAdmin
     .from("user_progress")
-    .select("current_day, current_streak, longest_streak, total_tasks_completed")
+    .select(
+      "current_day, current_streak, longest_streak, total_tasks_completed",
+    )
     .eq("user_id", userId)
     .single();
 
   // 3. Pacing detection
   const { data: block } = await supabase
     .from("plan_blocks")
-    .select("id, created_at, pacing_note")
+    .select("id, created_at, pacing_note, plan_id")
     .eq("id", task.plan_block_id)
     .maybeSingle();
 
@@ -150,7 +152,19 @@ async function handleTaskComplete(
     if (blockTasks && blockTasks.length > 0) {
       const total = blockTasks.length;
       const completed = blockTasks.filter((t: any) => t.is_completed).length;
-      const expected = Math.min(daysElapsed / 7, 1);
+
+      // Sprint plans use 10-day pacing, weekly plans use 7-day
+      let pacingDays = 7;
+      if (block.plan_id) {
+        const { data: planData } = await supabase
+          .from("learning_plans")
+          .select("plan_format")
+          .eq("id", block.plan_id)
+          .maybeSingle();
+        if (planData?.plan_format === "sprint") pacingDays = 10;
+      }
+
+      const expected = Math.min(daysElapsed / pacingDays, 1);
       const actual = completed / total;
 
       if (actual > expected + 0.3) {
@@ -240,11 +254,18 @@ async function handleBlockComplete(
     .eq("id", blockId);
 
   // 3. Pillar leveling
-  let levelUp: { pillar_id: string; pillar_name: string; old_level: number; new_level: number } | null = null;
+  let levelUp: {
+    pillar_id: string;
+    pillar_name: string;
+    old_level: number;
+    new_level: number;
+  } | null = null;
 
   const { data: pillar } = await supabase
     .from("pillars")
-    .select("id, name, current_level, last_difficulty_signal, blocks_completed_at_level, trend")
+    .select(
+      "id, name, current_level, last_difficulty_signal, blocks_completed_at_level, trend",
+    )
     .eq("id", block.pillar_id)
     .maybeSingle();
 
@@ -327,16 +348,19 @@ async function handleBlockComplete(
   // 5. Plan progression
   const { data: plan } = await supabase
     .from("learning_plans")
-    .select("id, total_weeks, pacing_profile, plan_outline")
+    .select("id, total_weeks, pacing_profile, plan_outline, plan_format")
     .eq("id", block.plan_id)
     .maybeSingle();
 
-  let planStatus: "in_progress" | "plan_complete" | "nearing_end" = "in_progress";
+  let planStatus: string = "in_progress";
   let nextBlock: Record<string, unknown> | null = null;
   let planCompleteData: Record<string, unknown> | null = null;
   let nearingEnd = false;
+  let sprintCheckinPending = false;
 
   if (plan) {
+    const isSprint = plan.plan_format === "sprint";
+
     // Count remaining uncompleted blocks
     const { count: remainingCount } = await supabase
       .from("plan_blocks")
@@ -345,74 +369,81 @@ async function handleBlockComplete(
       .eq("is_completed", false);
 
     if (remainingCount === 0) {
-      // All current blocks done — check if more weeks exist in outline
-      const { data: allBlocks } = await supabase
-        .from("plan_blocks")
-        .select("week_number")
-        .eq("plan_id", plan.id);
-
-      const maxGeneratedWeek = Math.max(
-        ...(allBlocks || []).map((b: any) => b.week_number),
-        0,
-      );
-
-      const outline = plan.plan_outline as any;
-
-      if (maxGeneratedWeek >= plan.total_weeks) {
-        // Plan is truly complete
-        planStatus = "plan_complete";
-
-        // Build summary
-        const { data: userPillars } = await supabase
-          .from("pillars")
-          .select("name, current_level")
-          .eq("user_id", userId)
-          .eq("is_active", true);
-
-        const { data: progressData } = await supabaseAdmin
-          .from("user_progress")
-          .select("total_tasks_completed")
-          .eq("user_id", userId)
-          .maybeSingle();
-
-        planCompleteData = {
-          total_weeks_completed: maxGeneratedWeek,
-          total_tasks_completed: progressData?.total_tasks_completed || 0,
-          pillars_summary: (userPillars || []).map((p: any) => ({
-            name: p.name,
-            final_level: p.current_level,
-          })),
-        };
+      if (isSprint) {
+        // Sprint plan: all blocks done → check-in pending
+        // Sprint plans are open-ended (total_weeks is null), so there's always a next sprint
+        planStatus = "sprint_checkin_pending";
+        sprintCheckinPending = true;
       } else {
-        // More weeks to generate
-        const nextWeekNumber = maxGeneratedWeek + 1;
-        const weekOutline = outline?.weeks?.find(
-          (w: any) => w.week_number === nextWeekNumber,
+        // Weekly plan: check if more weeks exist in outline
+        const { data: allBlocks } = await supabase
+          .from("plan_blocks")
+          .select("week_number")
+          .eq("plan_id", plan.id);
+
+        const maxGeneratedWeek = Math.max(
+          ...(allBlocks || []).map((b: any) => b.week_number),
+          0,
         );
 
-        if (weekOutline) {
-          nextBlock = {
-            should_generate: true,
-            week_number: nextWeekNumber,
-            pillars: weekOutline.pillars,
-          };
-        }
+        const outline = plan.plan_outline as any;
 
-        // Near-end detection for exploratory plans
-        if (
-          plan.pacing_profile === "exploratory" &&
-          plan.total_weeks - nextWeekNumber <= 1
-        ) {
-          planStatus = "nearing_end";
-          nearingEnd = true;
+        if (maxGeneratedWeek >= plan.total_weeks) {
+          // Plan is truly complete
+          planStatus = "plan_complete";
+
+          // Build summary
+          const { data: userPillars } = await supabase
+            .from("pillars")
+            .select("name, current_level")
+            .eq("user_id", userId)
+            .eq("is_active", true);
+
+          const { data: progressData } = await supabaseAdmin
+            .from("user_progress")
+            .select("total_tasks_completed")
+            .eq("user_id", userId)
+            .maybeSingle();
+
+          planCompleteData = {
+            total_weeks_completed: maxGeneratedWeek,
+            total_tasks_completed: progressData?.total_tasks_completed || 0,
+            pillars_summary: (userPillars || []).map((p: any) => ({
+              name: p.name,
+              final_level: p.current_level,
+            })),
+          };
+        } else {
+          // More weeks to generate
+          const nextWeekNumber = maxGeneratedWeek + 1;
+          const weekOutline = outline?.weeks?.find(
+            (w: any) => w.week_number === nextWeekNumber,
+          );
+
+          if (weekOutline) {
+            nextBlock = {
+              should_generate: true,
+              week_number: nextWeekNumber,
+              pillars: weekOutline.pillars,
+            };
+          }
+
+          // Near-end detection for exploratory plans
+          if (
+            plan.pacing_profile === "exploratory" &&
+            plan.total_weeks - nextWeekNumber <= 1
+          ) {
+            planStatus = "nearing_end";
+            nearingEnd = true;
+          }
         }
       }
     } else {
-      // Other blocks still pending in current week
+      // Other blocks still pending in current week/sprint
       planStatus = "in_progress";
 
-      // Near-end detection even when blocks remain
-      if (plan.pacing_profile === "exploratory") {
+      // Near-end detection even when blocks remain (weekly plans only)
+      if (!isSprint && plan.pacing_profile === "exploratory") {
         const { data: allBlocks } = await supabase
           .from("plan_blocks")
           .select("week_number")
@@ -437,6 +468,8 @@ async function handleBlockComplete(
     next_block: nextBlock,
     plan_complete_data: planCompleteData,
     nearing_end: nearingEnd,
+    sprint_checkin_pending: sprintCheckinPending,
+    sprint_number: sprintCheckinPending ? block.week_number : undefined,
   });
 }
 
@@ -476,7 +509,11 @@ Deno.serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     const ip = req.headers.get("x-forwarded-for") || "unknown";
     const rateCheck = await checkRateLimit(
-      supabaseAdmin, userId, ip, "process-checkin", CHECKIN_RATE_LIMIT,
+      supabaseAdmin,
+      userId,
+      ip,
+      "process-checkin",
+      CHECKIN_RATE_LIMIT,
     );
     if (!rateCheck.allowed) {
       return jsonRes({ error: rateCheck.message }, 429);
@@ -499,12 +536,19 @@ Deno.serve(async (req) => {
         return jsonRes({ error: "block_id is required" }, 400);
       }
       return await handleBlockComplete(
-        supabase, supabaseAdmin, userId, block_id,
-        difficulty || null, note || null,
+        supabase,
+        supabaseAdmin,
+        userId,
+        block_id,
+        difficulty || null,
+        note || null,
       );
     }
 
-    return jsonRes({ error: "Invalid event_type. Must be: task_complete, block_complete" }, 400);
+    return jsonRes(
+      { error: "Invalid event_type. Must be: task_complete, block_complete" },
+      400,
+    );
   } catch (err: any) {
     console.error(err);
     if (err.status === 429) {

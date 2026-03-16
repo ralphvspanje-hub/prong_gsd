@@ -4,6 +4,14 @@ This file tracks confusions, mistakes, and improvements made by agents working o
 When you encounter something wrong or unclear in any CLAUDE.md or in the code itself, add an entry here.
 If you resolved it, also update the relevant CLAUDE.md immediately and mark this entry as Fixed.
 
+## 2026-03-16 — Phase 10: Sprint Redesign
+
+**What was confusing / wrong:** CLAUDE.md described the plan system as "8-16 week" with weekly blocks. This was replaced with iterative focused sprints. All CLAUDE.md files updated with Phase 10 documentation including new table, new edge function, new routes, and sprint-specific gotchas. The `plan_blocks.week_number` column is reused as `sprint_number` for sprint plans — the semantic reinterpretation is documented but could confuse future agents if they assume week_number always means calendar weeks.
+**File/folder affected:** CLAUDE.md, supabase/functions/CLAUDE.md, all Phase 10 files
+**What I did:** Updated all CLAUDE.md files with comprehensive Phase 10 documentation. Added 14 new gotcha entries.
+**Suggested fix:** N/A — documentation is current.
+**Status:** Fixed
+
 ## 2026-03-16 — Phase 9.4: Separate Interview Prep Dashboard
 
 **What was confusing / wrong:** (1) CLAUDE.md described Dashboard as supporting "dual plan types with toggle" — this was the old architecture being replaced. (2) CLAUDE.md gotcha said "MistakeJournalDisplay appears on Dashboard only when viewMode === interview_prep" — no longer accurate with separate pages. (3) `gsd-mentor-chat` fetched `learning_plans` with no `plan_type` filter, so it could load either plan non-deterministically — needed explicit filtering by mode.

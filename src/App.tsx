@@ -21,6 +21,7 @@ import MockInterview from "./pages/MockInterview";
 import CrashCourseSelector from "./pages/CrashCourseSelector";
 import CrashCourseOnboarding from "./pages/CrashCourseOnboarding";
 import CrashCourseDashboard from "./pages/CrashCourseDashboard";
+import SprintCheckin from "./pages/SprintCheckin";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -141,6 +142,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <CrashCourseDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/sprint-checkin"
+                  element={
+                    <ProtectedRoute>
+                      <SprintCheckin />
                     </ProtectedRoute>
                   }
                 />

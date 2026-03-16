@@ -20,6 +20,7 @@ interface BlockCardProps {
   block: PlanBlock;
   tasks: PlanTask[];
   pillarName: string;
+  blockLabel?: string;
 }
 
 // Reuse platform badge colors from TaskItem
@@ -35,9 +36,12 @@ const PLATFORM_COLORS: Record<string, string> = {
 function buildSearchUrl(platform: string, query: string): string {
   const encoded = encodeURIComponent(query);
   const p = platform.toLowerCase();
-  if (p.includes("youtube")) return `https://www.youtube.com/results?search_query=${encoded}`;
-  if (p.includes("github")) return `https://github.com/search?q=${encoded}&type=repositories`;
-  if (p.includes("leetcode")) return `https://leetcode.com/problemset/?search=${encoded}`;
+  if (p.includes("youtube"))
+    return `https://www.youtube.com/results?search_query=${encoded}`;
+  if (p.includes("github"))
+    return `https://github.com/search?q=${encoded}&type=repositories`;
+  if (p.includes("leetcode"))
+    return `https://leetcode.com/problemset/?search=${encoded}`;
   if (p.includes("hackerrank")) return `https://www.hackerrank.com/domains`;
   return `https://www.google.com/search?q=${encodeURIComponent(platform + " " + query)}`;
 }
@@ -50,7 +54,12 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
-export const BlockCard = ({ block, tasks, pillarName }: BlockCardProps) => {
+export const BlockCard = ({
+  block,
+  tasks,
+  pillarName,
+  blockLabel = "Week",
+}: BlockCardProps) => {
   const completedCount = tasks.filter((t) => t.is_completed).length;
   const feedback = block.checkin_feedback as unknown as CheckinFeedback | null;
 
@@ -71,7 +80,7 @@ export const BlockCard = ({ block, tasks, pillarName }: BlockCardProps) => {
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                Week {block.week_number}
+                {blockLabel} {block.week_number}
                 {block.completed_at && ` · ${formatDate(block.completed_at)}`}
                 {" · "}
                 {completedCount}/{tasks.length} tasks

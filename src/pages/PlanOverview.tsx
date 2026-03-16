@@ -166,7 +166,113 @@ const PlanOverview = () => {
     );
 
   const outline = plan.plan_outline as unknown as PlanOutline;
+  const isSprint = (plan as any).plan_format === "sprint";
+  const sprintOutline = plan.plan_outline as any;
 
+  // Sprint format: show career goal + arc
+  if (isSprint && sprintOutline) {
+    return (
+      <Layout>
+        <div className="max-w-2xl mx-auto py-4 space-y-5">
+          {/* Header */}
+          <div className="space-y-1">
+            <Link to="/dashboard">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1 -ml-2 mb-1 text-muted-foreground"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Back to Today
+              </Button>
+            </Link>
+            <h1 className="font-serif text-2xl font-bold">
+              Your Learning Journey
+            </h1>
+            {sprintOutline.career_goal && (
+              <p className="text-muted-foreground text-sm">
+                {sprintOutline.career_goal}
+              </p>
+            )}
+          </div>
+
+          {/* Sprint arc timeline */}
+          <ScrollArea className="h-[calc(100vh-14rem)]">
+            <div className="space-y-3 pr-4">
+              {(sprintOutline.arc || []).map((sprint: any) => {
+                const status =
+                  weekStatuses.get(sprint.sprint_number) || "future";
+                const isCompleted = status === "completed";
+                const isCurrent = status === "current";
+
+                return (
+                  <Card
+                    key={sprint.sprint_number}
+                    className={`border-border transition-colors ${
+                      isCurrent ? "border-accent/50" : ""
+                    } ${isCompleted ? "opacity-60" : ""}`}
+                  >
+                    <CardContent className="py-4 space-y-2">
+                      <div className="flex items-center gap-2">
+                        {isCompleted && (
+                          <Check className="h-4 w-4 text-green-500" />
+                        )}
+                        {isCurrent && (
+                          <Play className="h-4 w-4 text-accent fill-accent" />
+                        )}
+                        {status === "future" && (
+                          <Circle className="h-4 w-4 text-muted-foreground" />
+                        )}
+
+                        <span className="text-sm font-serif font-medium">
+                          Sprint {sprint.sprint_number}
+                        </span>
+
+                        {sprint.theme && (
+                          <span className="text-xs text-muted-foreground">
+                            — {sprint.theme}
+                          </span>
+                        )}
+
+                        {isCurrent && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Current
+                          </Badge>
+                        )}
+                      </div>
+
+                      {sprint.focus_pillars && (
+                        <div className="flex gap-1 pl-6">
+                          {sprint.focus_pillars.map(
+                            (name: string, i: number) => (
+                              <Badge
+                                key={i}
+                                variant="outline"
+                                className="text-[10px]"
+                              >
+                                {name}
+                              </Badge>
+                            ),
+                          )}
+                        </div>
+                      )}
+
+                      {sprint.target_outcome && (
+                        <p className="text-sm text-muted-foreground pl-6">
+                          {sprint.target_outcome}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        </div>
+      </Layout>
+    );
+  }
+
+  // Weekly format: existing timeline
   return (
     <Layout>
       <div className="max-w-2xl mx-auto py-4 space-y-5">

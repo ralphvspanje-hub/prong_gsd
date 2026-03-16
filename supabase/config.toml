@@ -21,5 +21,8 @@ verify_jwt = false
 [functions.gsd-mock-interview]
 verify_jwt = false
 
+[functions.gsd-sprint-checkin]
+verify_jwt = false
+
 [functions.gsd-reset-user-data]
 verify_jwt = false

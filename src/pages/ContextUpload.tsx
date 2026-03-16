@@ -101,7 +101,7 @@ const ContextUpload = () => {
     setGenerating(true);
     try {
       const { error } = await supabase.functions.invoke("gsd-generate-plan", {
-        body: { mode: "full_plan" },
+        body: { mode: "sprint_plan" },
       });
       if (error) throw error;
       toast.success("Plan generated! Redirecting...");

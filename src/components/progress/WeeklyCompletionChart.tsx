@@ -14,6 +14,7 @@ type PlanBlock = Tables<"plan_blocks">;
 interface WeeklyCompletionChartProps {
   tasks: PlanTask[];
   blocks: PlanBlock[];
+  planFormat?: string;
 }
 
 const chartConfig: ChartConfig = {
@@ -23,7 +24,15 @@ const chartConfig: ChartConfig = {
   },
 };
 
-export const WeeklyCompletionChart = ({ tasks, blocks }: WeeklyCompletionChartProps) => {
+export const WeeklyCompletionChart = ({
+  tasks,
+  blocks,
+  planFormat,
+}: WeeklyCompletionChartProps) => {
+  const isSprint = planFormat === "sprint";
+  const unitPrefix = isSprint ? "S" : "W";
+  const progressLabel = isSprint ? "Sprint Progress" : "{progressLabel}";
+
   const data = useMemo(() => {
     // Map block ID → week number
     const blockWeekMap = new Map<string, number>();
@@ -50,12 +59,12 @@ export const WeeklyCompletionChart = ({ tasks, blocks }: WeeklyCompletionChartPr
       }
     }
 
-    const allWeeks = [...new Set([...weekCounts.keys(), ...weekTotals.keys()])].sort(
-      (a, b) => a - b,
-    );
+    const allWeeks = [
+      ...new Set([...weekCounts.keys(), ...weekTotals.keys()]),
+    ].sort((a, b) => a - b);
 
     return allWeeks.map((week) => ({
-      week: `W${week}`,
+      week: `${unitPrefix}${week}`,
       completed: weekCounts.get(week) || 0,
       total: weekTotals.get(week) || 0,
     }));
@@ -64,7 +73,7 @@ export const WeeklyCompletionChart = ({ tasks, blocks }: WeeklyCompletionChartPr
   if (data.length === 0) {
     return (
       <section className="space-y-3">
-        <h2 className="font-serif text-lg font-semibold">Weekly Progress</h2>
+        <h2 className="font-serif text-lg font-semibold">{progressLabel}</h2>
         <p className="text-sm text-muted-foreground text-center py-6">
           No task data yet. Complete some tasks to see your weekly progress.
         </p>
@@ -74,9 +83,12 @@ export const WeeklyCompletionChart = ({ tasks, blocks }: WeeklyCompletionChartPr
 
   return (
     <section className="space-y-3">
-      <h2 className="font-serif text-lg font-semibold">Weekly Progress</h2>
+      <h2 className="font-serif text-lg font-semibold">{progressLabel}</h2>
       <ChartContainer config={chartConfig} className="aspect-[2/1] w-full">
-        <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+        <BarChart
+          data={data}
+          margin={{ top: 4, right: 4, bottom: 0, left: -20 }}
+        >
           <CartesianGrid vertical={false} strokeDasharray="3 3" />
           <XAxis dataKey="week" tickLine={false} axisLine={false} />
           <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
@@ -84,7 +96,11 @@ export const WeeklyCompletionChart = ({ tasks, blocks }: WeeklyCompletionChartPr
             content={<ChartTooltipContent />}
             cursor={{ fill: "hsl(var(--muted))" }}
           />
-          <Bar dataKey="completed" fill="var(--color-completed)" radius={[4, 4, 0, 0]} />
+          <Bar
+            dataKey="completed"
+            fill="var(--color-completed)"
+            radius={[4, 4, 0, 0]}
+          />
         </BarChart>
       </ChartContainer>
     </section>

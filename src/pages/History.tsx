@@ -42,7 +42,7 @@ const History = () => {
     queryFn: async () => {
       let query = supabase
         .from("learning_plans")
-        .select("id")
+        .select("id, plan_format")
         .eq("user_id", userId!)
         .eq("is_active", true);
 
@@ -226,10 +226,18 @@ const History = () => {
               <SelectValue placeholder="Week" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Weeks</SelectItem>
+              <SelectItem value="all">
+                All{" "}
+                {(activePlan as any)?.plan_format === "sprint"
+                  ? "Sprints"
+                  : "Weeks"}
+              </SelectItem>
               {availableWeeks.map((w) => (
                 <SelectItem key={w} value={String(w)}>
-                  Week {w}
+                  {(activePlan as any)?.plan_format === "sprint"
+                    ? "Sprint"
+                    : "Week"}{" "}
+                  {w}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -244,6 +252,11 @@ const History = () => {
               block={block}
               tasks={tasksByBlock.get(block.id) || []}
               pillarName={pillarNameMap.get(block.pillar_id) || "Unknown"}
+              blockLabel={
+                (activePlan as any)?.plan_format === "sprint"
+                  ? "Sprint"
+                  : "Week"
+              }
             />
           ))}
           {sortedBlocks.length === 0 && (

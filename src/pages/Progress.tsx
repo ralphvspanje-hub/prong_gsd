@@ -199,7 +199,11 @@ const Progress = () => {
         />
 
         {/* C. Weekly completion chart */}
-        <WeeklyCompletionChart tasks={allTasks} blocks={allBlocks} />
+        <WeeklyCompletionChart
+          tasks={allTasks}
+          blocks={allBlocks}
+          planFormat={(plan as any).plan_format}
+        />
 
         {/* D. Pillar levels snapshot */}
         <PillarLevelCards pillars={pillars} />
@@ -219,6 +223,7 @@ const Progress = () => {
             week_number: b.week_number,
             is_completed: b.is_completed,
           }))}
+          planFormat={(plan as any).plan_format}
         />
       </div>
     </Layout>
