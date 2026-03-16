@@ -482,6 +482,12 @@ const Dashboard = () => {
     !interviewPlan &&
     userId
   ) {
+    // After interview-only rewind, go to interview onboarding instead of context-upload
+    const hasInterviewPillars = pillars?.some((p) => p.sort_order >= 100);
+    const hasLearningPillars = pillars?.some((p) => p.sort_order < 100);
+    if (hasInterviewPillars && !hasLearningPillars) {
+      return <Navigate to="/interview-onboarding" replace />;
+    }
     return <Navigate to="/context-upload" replace />;
   }
 
