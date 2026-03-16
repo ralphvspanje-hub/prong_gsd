@@ -142,7 +142,7 @@ const PlanOverview = () => {
     );
   }
 
-  if (!plan) return null;
+  if (!plan) return <Navigate to="/context-upload" replace />;
 
   const outline = plan.plan_outline as unknown as PlanOutline;
 

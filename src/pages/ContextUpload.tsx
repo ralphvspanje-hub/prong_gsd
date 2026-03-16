@@ -63,15 +63,8 @@ const ContextUpload = () => {
     enabled: !!user?.id,
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-6 w-6 animate-spin text-accent" />
-      </div>
-    );
-  }
-
   // Check if pillars already exist (post-rewind state — can skip onboarding)
+  // NOTE: This hook MUST be before any conditional returns (React hooks rule)
   const { data: hasPillars } = useQuery({
     queryKey: ["has-pillars", user?.id],
     queryFn: async () => {
@@ -83,6 +76,14 @@ const ContextUpload = () => {
     },
     enabled: !!user?.id && !isLoading && !hasPlan,
   });
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-6 w-6 animate-spin text-accent" />
+      </div>
+    );
+  }
 
   if (hasPlan) {
     return <Navigate to="/dashboard" replace />;
