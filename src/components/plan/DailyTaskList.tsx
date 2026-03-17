@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { TaskItem } from "./TaskItem";
 import { PrimerView } from "./PrimerView";
 import { Tables } from "@/integrations/supabase/types";
@@ -18,95 +19,92 @@ interface DailyTaskListProps {
 }
 
 /** Primary task list grouped by pillar. Incomplete tasks first, completed at bottom. */
-export const DailyTaskList = ({
-  blocks,
-  tasks,
-  pillars,
-  onToggleTask,
-}: DailyTaskListProps) => {
-  // Build a pillar name lookup
-  const pillarNames = new Map(pillars.map((p) => [p.id, p.name]));
+export const DailyTaskList = memo(
+  ({ blocks, tasks, pillars, onToggleTask }: DailyTaskListProps) => {
+    // Build a pillar name lookup
+    const pillarNames = new Map(pillars.map((p) => [p.id, p.name]));
 
-  // Group tasks by pillar via their parent plan_block
-  const blockPillarMap = new Map(blocks.map((b) => [b.id, b.pillar_id]));
+    // Group tasks by pillar via their parent plan_block
+    const blockPillarMap = new Map(blocks.map((b) => [b.id, b.pillar_id]));
 
-  const pillarGroups = new Map<
-    string,
-    {
-      name: string;
-      blockTitle: string;
-      blockId: string | null;
-      contextBrief: string | null;
-      tasks: PlanTask[];
+    const pillarGroups = new Map<
+      string,
+      {
+        name: string;
+        blockTitle: string;
+        blockId: string | null;
+        contextBrief: string | null;
+        tasks: PlanTask[];
+      }
+    >();
+
+    for (const task of tasks) {
+      const pillarId = blockPillarMap.get(task.plan_block_id) || "unknown";
+      if (!pillarGroups.has(pillarId)) {
+        const block = blocks.find((b) => b.pillar_id === pillarId);
+        pillarGroups.set(pillarId, {
+          name: pillarNames.get(pillarId) || "Tasks",
+          blockTitle: block?.title || "",
+          blockId: block?.id || null,
+          contextBrief:
+            !block?.is_completed && block?.context_brief
+              ? block.context_brief
+              : null,
+          tasks: [],
+        });
+      }
+      pillarGroups.get(pillarId)!.tasks.push(task);
     }
-  >();
 
-  for (const task of tasks) {
-    const pillarId = blockPillarMap.get(task.plan_block_id) || "unknown";
-    if (!pillarGroups.has(pillarId)) {
-      const block = blocks.find((b) => b.pillar_id === pillarId);
-      pillarGroups.set(pillarId, {
-        name: pillarNames.get(pillarId) || "Tasks",
-        blockTitle: block?.title || "",
-        blockId: block?.id || null,
-        contextBrief:
-          !block?.is_completed && block?.context_brief
-            ? block.context_brief
-            : null,
-        tasks: [],
+    // Sort tasks within each group: incomplete first, then completed
+    for (const group of pillarGroups.values()) {
+      group.tasks.sort((a, b) => {
+        if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
+        return a.task_order - b.task_order;
       });
     }
-    pillarGroups.get(pillarId)!.tasks.push(task);
-  }
 
-  // Sort tasks within each group: incomplete first, then completed
-  for (const group of pillarGroups.values()) {
-    group.tasks.sort((a, b) => {
-      if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
-      return a.task_order - b.task_order;
-    });
-  }
+    const groups = Array.from(pillarGroups.values());
+    const showHeaders = groups.length > 1;
 
-  const groups = Array.from(pillarGroups.values());
-  const showHeaders = groups.length > 1;
+    if (tasks.length === 0) {
+      return (
+        <p className="text-sm text-muted-foreground py-4 text-center">
+          No tasks for this week yet.
+        </p>
+      );
+    }
 
-  if (tasks.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground py-4 text-center">
-        No tasks for this week yet.
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {groups.map((group) => (
-        <div key={group.name}>
-          {showHeaders && (
-            <div className="mb-2">
-              <h3 className="text-sm font-medium">{group.name}</h3>
-              {group.blockTitle && (
-                <p className="text-xs text-muted-foreground">
-                  {group.blockTitle}
-                </p>
-              )}
+      <div className="space-y-6">
+        {groups.map((group) => (
+          <div key={group.name}>
+            {showHeaders && (
+              <div className="mb-2">
+                <h3 className="text-sm font-medium">{group.name}</h3>
+                {group.blockTitle && (
+                  <p className="text-xs text-muted-foreground">
+                    {group.blockTitle}
+                  </p>
+                )}
+              </div>
+            )}
+            {group.blockId && group.contextBrief && (
+              <div className="mb-3">
+                <PrimerView
+                  blockId={group.blockId}
+                  contextBrief={group.contextBrief}
+                />
+              </div>
+            )}
+            <div className="divide-y divide-border">
+              {group.tasks.map((task) => (
+                <TaskItem key={task.id} task={task} onToggle={onToggleTask} />
+              ))}
             </div>
-          )}
-          {group.blockId && group.contextBrief && (
-            <div className="mb-3">
-              <PrimerView
-                blockId={group.blockId}
-                contextBrief={group.contextBrief}
-              />
-            </div>
-          )}
-          <div className="divide-y divide-border">
-            {group.tasks.map((task) => (
-              <TaskItem key={task.id} task={task} onToggle={onToggleTask} />
-            ))}
           </div>
-        </div>
-      ))}
-    </div>
-  );
-};
+        ))}
+      </div>
+    );
+  },
+);

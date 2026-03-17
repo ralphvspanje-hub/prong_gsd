@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
@@ -54,7 +54,7 @@ const Dashboard = () => {
   const userId = user?.id;
 
   // Set localStorage so shared pages (/plan, /mentor, /progress, /history) know we're in learning mode
-  useMemo(() => {
+  useEffect(() => {
     localStorage.setItem("pronggsd-dashboard-view", "learning");
     localStorage.removeItem("pronggsd-active-crashcourse-id");
     localStorage.removeItem("pronggsd-crashcourse-type");

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -78,7 +78,7 @@ function buildSearchUrl(platform: string, query: string): string {
 const ANSWER_MAX_LENGTH = 2000;
 
 /** Individual task with checkbox, platform badge, resource link, time estimate, and why text. */
-export const TaskItem = ({ task, onToggle }: TaskItemProps) => {
+export const TaskItem = memo(({ task, onToggle }: TaskItemProps) => {
   const [whyExpanded, setWhyExpanded] = useState(false);
   const [starting, setStarting] = useState(false);
   const navigate = useNavigate();
@@ -446,4 +446,4 @@ export const TaskItem = ({ task, onToggle }: TaskItemProps) => {
       )}
     </motion.div>
   );
-};
+});
