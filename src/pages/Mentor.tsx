@@ -447,11 +447,7 @@ const Mentor = () => {
                         }
                         onInput={handleTextareaInput}
                         onKeyDown={handleKeyDown}
-                        placeholder={
-                          activePracticeQuestion
-                            ? "Type your answer..."
-                            : `Ask ${mentorName} anything...`
-                        }
+                        placeholder={`Ask ${mentorName} anything...`}
                         disabled={loading}
                         rows={1}
                         className={`${TEXTAREA_BASE} min-h-[80px] max-h-[200px] px-4 pt-5 pb-3`}
@@ -645,11 +641,7 @@ const Mentor = () => {
                         }
                         onInput={handleTextareaInput}
                         onKeyDown={handleKeyDown}
-                        placeholder={
-                          activePracticeQuestion
-                            ? "Type your answer..."
-                            : `Ask ${mentorName} anything...`
-                        }
+                        placeholder={`Ask ${mentorName} anything...`}
                         disabled={loading}
                         rows={1}
                         className={`${TEXTAREA_BASE} min-h-[56px] max-h-[200px] px-4 pt-5 pb-3`}
