@@ -98,50 +98,6 @@ function getSprintIntensity(dailyMinutes: number): string {
   return "intensive";
 }
 
-// Approved platforms — only free, well-known sources allowed
-const APPROVED_PLATFORMS = [
-  "YouTube",
-  "LeetCode",
-  "HackerRank",
-  "freeCodeCamp",
-  "Kaggle",
-  "GitHub",
-  "MDN Web Docs",
-  "Official Docs",
-  "Khan Academy",
-  "arXiv",
-  "Google Scholar",
-  "Dev.to",
-  "W3Schools",
-  "ProngGSD",
-] as const;
-
-// Normalize AI-returned platform names to approved list (fallback: YouTube)
-function normalizeplatform(raw: string): string {
-  const lower = raw.toLowerCase();
-  for (const p of APPROVED_PLATFORMS) {
-    if (p.toLowerCase() === lower) return p;
-  }
-  // Fuzzy match common variants
-  if (lower.includes("youtube")) return "YouTube";
-  if (lower.includes("leetcode")) return "LeetCode";
-  if (lower.includes("hackerrank")) return "HackerRank";
-  if (lower.includes("freecodecamp") || lower.includes("fcc"))
-    return "freeCodeCamp";
-  if (lower.includes("kaggle")) return "Kaggle";
-  if (lower.includes("github")) return "GitHub";
-  if (lower.includes("mdn")) return "MDN Web Docs";
-  if (lower.includes("khan")) return "Khan Academy";
-  if (lower.includes("arxiv")) return "arXiv";
-  if (lower.includes("scholar")) return "Google Scholar";
-  if (lower.includes("dev.to")) return "Dev.to";
-  if (lower.includes("w3school")) return "W3Schools";
-  if (lower.includes("docs") || lower.includes("documentation"))
-    return "Official Docs";
-  // Default fallback — YouTube has content on everything
-  return "YouTube";
-}
-
 // Maps pillar name keywords → curated_resources skill_area values
 const SKILL_AREA_MAP: Record<string, string[]> = {
   sql: ["sql_basics", "sql_intermediate", "sql_advanced"],
@@ -1419,7 +1375,7 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
     const activePillarCount = week.pillars.length;
     for (let i = 0; i < week.pillars.length; i += 2) {
       const chunk = week.pillars.slice(i, i + 2);
-      const blockPromises = chunk.map((wp) =>
+      const blockPromises = chunk.map((wp: any) =>
         generateBlock(supabase, supabaseAdmin, geminiApiKey, {
           userId,
           planId: plan.id,
