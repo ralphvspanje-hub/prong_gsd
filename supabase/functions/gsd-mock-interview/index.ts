@@ -122,10 +122,16 @@ ${COMMON_RULES}`;
 
 function deriveInterviewType(actionText: string): string {
   const lower = actionText.toLowerCase();
-  if (lower.includes("behavioral") || lower.includes("star")) return "behavioral";
+  if (lower.includes("behavioral") || lower.includes("star"))
+    return "behavioral";
   if (lower.includes("sql") || lower.includes("technical")) return "technical";
   if (lower.includes("system design")) return "system_design";
-  if (lower.includes("case study") || lower.includes("case_study") || lower.includes("product sense")) return "case_study";
+  if (
+    lower.includes("case study") ||
+    lower.includes("case_study") ||
+    lower.includes("product sense")
+  )
+    return "case_study";
   return "behavioral"; // default
 }
 
@@ -177,7 +183,13 @@ Deno.serve(async (req) => {
     // ---- Rate limit ----
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     const ip = req.headers.get("x-forwarded-for") || "unknown";
-    const rateCheck = await checkRateLimit(supabaseAdmin, userId, ip, "mock-interview", 200);
+    const rateCheck = await checkRateLimit(
+      supabaseAdmin,
+      userId,
+      ip,
+      "mock-interview",
+      200,
+    );
     if (!rateCheck.allowed) {
       return jsonRes({ error: rateCheck.message }, 429);
     }
@@ -187,7 +199,10 @@ Deno.serve(async (req) => {
     const { action } = body;
 
     if (!["start", "continue", "complete"].includes(action)) {
-      return jsonRes({ error: "Invalid action. Must be: start, continue, complete" }, 400);
+      return jsonRes(
+        { error: "Invalid action. Must be: start, continue, complete" },
+        400,
+      );
     }
 
     // ====================================================================
@@ -213,7 +228,9 @@ Deno.serve(async (req) => {
       // Fetch user interview context
       const { data: profile } = await supabase
         .from("user_profile")
-        .select("interview_target_role, interview_company, interview_company_context")
+        .select(
+          "interview_target_role, interview_company, interview_company_context",
+        )
         .eq("user_id", userId)
         .maybeSingle();
 
@@ -222,7 +239,12 @@ Deno.serve(async (req) => {
       const company = profile?.interview_company || null;
       const companyContext = profile?.interview_company_context || null;
 
-      const systemPrompt = buildSystemPrompt(interviewType, targetRole, companyContext, 0);
+      const systemPrompt = buildSystemPrompt(
+        interviewType,
+        targetRole,
+        companyContext,
+        0,
+      );
 
       // Call Gemini for the opening question
       const contents = [
@@ -247,14 +269,21 @@ Deno.serve(async (req) => {
 
       if (!aiResponse.ok) {
         if (aiResponse.status === 429) {
-          return jsonRes({ error: "The AI service is temporarily unavailable due to high demand. Please try again in a few minutes." }, 429);
+          return jsonRes(
+            {
+              error:
+                "The AI service is temporarily unavailable due to high demand. Please try again in a few minutes.",
+            },
+            429,
+          );
         }
         const errText = await aiResponse.text();
         throw new Error(`AI API error: ${aiResponse.status} ${errText}`);
       }
 
       const aiData = await aiResponse.json();
-      const aiText: string = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const aiText: string =
+        aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
       // Create mock_interviews row
       const { data: mockRow, error: insertErr } = await supabaseAdmin
@@ -275,7 +304,10 @@ Deno.serve(async (req) => {
 
       if (insertErr) {
         console.error("Error creating mock interview:", insertErr);
-        return jsonRes({ error: "Failed to create mock interview session" }, 500);
+        return jsonRes(
+          { error: "Failed to create mock interview session" },
+          500,
+        );
       }
 
       return jsonRes({
@@ -293,11 +325,18 @@ Deno.serve(async (req) => {
       if (!mock_id) {
         return jsonRes({ error: "mock_id is required" }, 400);
       }
-      if (!message || typeof message !== "string" || message.trim().length === 0) {
+      if (
+        !message ||
+        typeof message !== "string" ||
+        message.trim().length === 0
+      ) {
         return jsonRes({ error: "message is required" }, 400);
       }
       if (message.length > 2000) {
-        return jsonRes({ error: "Message too long (max 2000 characters)" }, 400);
+        return jsonRes(
+          { error: "Message too long (max 2000 characters)" },
+          400,
+        );
       }
 
       // Fetch the mock interview row
@@ -318,7 +357,8 @@ Deno.serve(async (req) => {
       }
 
       // Build messages array with user's new message
-      const existingMessages: { role: string; content: string }[] = mock.messages || [];
+      const existingMessages: { role: string; content: string }[] =
+        mock.messages || [];
       const updatedMessages = [
         ...existingMessages,
         { role: "user", content: message.trim() },
@@ -358,14 +398,21 @@ Deno.serve(async (req) => {
 
       if (!aiResponse.ok) {
         if (aiResponse.status === 429) {
-          return jsonRes({ error: "The AI service is temporarily unavailable due to high demand. Please try again in a few minutes." }, 429);
+          return jsonRes(
+            {
+              error:
+                "The AI service is temporarily unavailable due to high demand. Please try again in a few minutes.",
+            },
+            429,
+          );
         }
         const errText = await aiResponse.text();
         throw new Error(`AI API error: ${aiResponse.status} ${errText}`);
       }
 
       const aiData = await aiResponse.json();
-      const fullContent: string = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const fullContent: string =
+        aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
       // Check for completion
       const completeMatch = fullContent.match(
@@ -381,12 +428,18 @@ Deno.serve(async (req) => {
         try {
           const feedback = JSON.parse(completeMatch[1]);
           const conversational = fullContent
-            .replace(/\[INTERVIEW_COMPLETE\][\s\S]*?\[\/INTERVIEW_COMPLETE\]/, "")
+            .replace(
+              /\[INTERVIEW_COMPLETE\][\s\S]*?\[\/INTERVIEW_COMPLETE\]/,
+              "",
+            )
             .trim();
 
           // Calculate duration
           const createdAt = new Date(mock.created_at).getTime();
-          const durationMinutes = Math.max(1, Math.round((Date.now() - createdAt) / 60000));
+          const durationMinutes = Math.max(
+            1,
+            Math.round((Date.now() - createdAt) / 60000),
+          );
 
           // Update row as completed
           await supabaseAdmin
@@ -451,7 +504,8 @@ Deno.serve(async (req) => {
         return jsonRes({ error: "This interview is already completed" }, 400);
       }
 
-      const existingMessages: { role: string; content: string }[] = mock.messages || [];
+      const existingMessages: { role: string; content: string }[] =
+        mock.messages || [];
 
       // Build Gemini contents
       const contents = existingMessages.map((m) => ({
@@ -462,15 +516,21 @@ Deno.serve(async (req) => {
       // Add a final user message to trigger evaluation
       contents.push({
         role: "user",
-        parts: [{ text: "I'd like to end the interview here. Please provide your evaluation." }],
+        parts: [
+          {
+            text: "I'd like to end the interview here. Please provide your evaluation.",
+          },
+        ],
       });
 
-      const forcePrompt = buildSystemPrompt(
-        mock.interview_type,
-        mock.target_role,
-        mock.company_context,
-        999, // force wrap-up hint
-      ) + "\n\nThe candidate has ended the interview early. Based on the conversation so far, provide your evaluation. You MUST include the [INTERVIEW_COMPLETE] block with your feedback.";
+      const forcePrompt =
+        buildSystemPrompt(
+          mock.interview_type,
+          mock.target_role,
+          mock.company_context,
+          999, // force wrap-up hint
+        ) +
+        "\n\nThe candidate has ended the interview early. Based on the conversation so far, provide your evaluation. You MUST include the [INTERVIEW_COMPLETE] block with your feedback.";
 
       const aiResponse = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent",
@@ -490,21 +550,31 @@ Deno.serve(async (req) => {
 
       if (!aiResponse.ok) {
         if (aiResponse.status === 429) {
-          return jsonRes({ error: "The AI service is temporarily unavailable due to high demand. Please try again in a few minutes." }, 429);
+          return jsonRes(
+            {
+              error:
+                "The AI service is temporarily unavailable due to high demand. Please try again in a few minutes.",
+            },
+            429,
+          );
         }
         const errText = await aiResponse.text();
         throw new Error(`AI API error: ${aiResponse.status} ${errText}`);
       }
 
       const aiData = await aiResponse.json();
-      const fullContent: string = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const fullContent: string =
+        aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
       const completeMatch = fullContent.match(
         /\[INTERVIEW_COMPLETE\]\s*([\s\S]*?)\s*\[\/INTERVIEW_COMPLETE\]/,
       );
 
       const createdAt = new Date(mock.created_at).getTime();
-      const durationMinutes = Math.max(1, Math.round((Date.now() - createdAt) / 60000));
+      const durationMinutes = Math.max(
+        1,
+        Math.round((Date.now() - createdAt) / 60000),
+      );
 
       let feedback = null;
       let conversational = fullContent;
@@ -512,18 +582,25 @@ Deno.serve(async (req) => {
       if (completeMatch) {
         try {
           feedback = JSON.parse(completeMatch[1]);
-          conversational = fullContent
-            .replace(/\[INTERVIEW_COMPLETE\][\s\S]*?\[\/INTERVIEW_COMPLETE\]/, "")
-            .trim() || "Thanks for the interview. Here's your feedback.";
+          conversational =
+            fullContent
+              .replace(
+                /\[INTERVIEW_COMPLETE\][\s\S]*?\[\/INTERVIEW_COMPLETE\]/,
+                "",
+              )
+              .trim() || "Thanks for the interview. Here's your feedback.";
         } catch {
           // JSON parse failed — build minimal feedback
           feedback = {
             overall_score: 5,
             strengths: ["Attempted the interview"],
-            areas_to_improve: ["Interview ended early — practice completing full mock sessions"],
+            areas_to_improve: [
+              "Interview ended early — practice completing full mock sessions",
+            ],
             key_mistakes: [],
             question_scores: [],
-            suggested_follow_up: "Try completing a full mock interview next time.",
+            suggested_follow_up:
+              "Try completing a full mock interview next time.",
           };
         }
       } else {
@@ -531,10 +608,13 @@ Deno.serve(async (req) => {
         feedback = {
           overall_score: 5,
           strengths: ["Attempted the interview"],
-          areas_to_improve: ["Interview ended early — practice completing full mock sessions"],
+          areas_to_improve: [
+            "Interview ended early — practice completing full mock sessions",
+          ],
           key_mistakes: [],
           question_scores: [],
-          suggested_follow_up: "Try completing a full mock interview next time.",
+          suggested_follow_up:
+            "Try completing a full mock interview next time.",
         };
       }
 
