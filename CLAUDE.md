@@ -46,6 +46,7 @@ prong_gsd/
 │       ├── gsd-interview-onboarding/ # AI interview prep mini-onboarding (3-4 turns)
 │       ├── gsd-mock-interview/      # AI mock interview sessions (start/continue/complete)
 │       ├── gsd-onboarding-chat/     # AI onboarding conversation
+│       ├── gsd-practice-feedback/   # AI practice question feedback (single-shot, 2 attempts)
 │       ├── gsd-process-checkin/     # Task/block completion, streak, pacing, pillar leveling
 │       ├── gsd-sprint-checkin/      # AI sprint check-in conversation (start/continue)
 │       └── gsd-reset-user-data/     # Destructive data reset
@@ -75,13 +76,13 @@ Each subfolder has its own `CLAUDE.md`. Read it when working in that folder.
 
 ### New ProngGSD tables (Phase 1)
 
-| Table                 | Purpose                                          | RLS                  |
-| --------------------- | ------------------------------------------------ | -------------------- |
-| **curated_resources** | External learning resources (shared, no user_id) | authenticated SELECT |
-| **learning_plans**    | Multi-week plan per user                         | user_id scoped       |
-| **plan_blocks**       | Weekly task sets per pillar                      | user_id scoped       |
-| **plan_tasks**        | Individual tasks within plan blocks              | user_id scoped       |
-| **user_progress**     | Streak and progress tracking                     | user_id scoped       |
+| Table                 | Purpose                                                                                                                                                             | RLS                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| **curated_resources** | External learning resources (shared, no user_id)                                                                                                                    | authenticated SELECT |
+| **learning_plans**    | Multi-week plan per user                                                                                                                                            | user_id scoped       |
+| **plan_blocks**       | Weekly task sets per pillar                                                                                                                                         | user_id scoped       |
+| **plan_tasks**        | Individual tasks within plan blocks. Practice questions use `attempt_count`, `user_answers` (jsonb array of `{answer, feedback, attempt}`), `last_feedback` columns | user_id scoped       |
+| **user_progress**     | Streak and progress tracking                                                                                                                                        | user_id scoped       |
 
 ### Interview Prep tables (Phase 9)
 
@@ -260,6 +261,10 @@ Edge function env vars (set in Supabase dashboard):
 - Phase 10: `sprint_checkins` table stores multi-turn conversations. `gsd-sprint-checkin` edge function with start/continue actions (same pattern as `gsd-mock-interview`).
 - Phase 10: `gsd-reset-user-data` deletes `sprint_checkins` before `learning_plans` (FK order).
 - Phase 10: Onboarding.tsx and ContextUpload.tsx call `sprint_plan` mode instead of `full_plan` for new learning plans.
+- Phase 11B: `practice_question` resource_type renders inline in TaskItem — textarea + "Submit Answer" + AI feedback. Max 2 attempts. Checkbox disabled until at least 1 attempt. Auto-completes on attempt 2.
+- Phase 11B: `gsd-practice-feedback` edge function — single-shot feedback. Input: `{ task_id, answer, attempt }`. Rate limit: 100/user/day. Updates `attempt_count`, `user_answers`, `last_feedback` on `plan_tasks`. Auto-marks completed on attempt 2.
+- Phase 11B: `plan_tasks` has 3 practice question columns: `attempt_count` (int, default 0), `user_answers` (jsonb, default `[]`), `last_feedback` (text). Structure: `[{answer, feedback, attempt}]`.
+- Phase 11B: Old "Practice DRILL" mentor-redirect flow removed. `extractDrillQuestion()` deleted from TaskItem, `practiceState`/`activePracticeQuestion`/`[PRACTICE DRILL FEEDBACK REQUEST]` wrapping deleted from Mentor.tsx. Old Practice DRILL tasks from existing plans will render as plain text (no special interaction).
 
 ---
 

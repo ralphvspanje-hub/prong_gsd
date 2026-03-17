@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useDemo, DEMO_MENTOR_MESSAGES } from "@/hooks/useDemo";
 import { useMentorName } from "@/hooks/useMentorName";
@@ -216,14 +215,6 @@ const Mentor = () => {
   const { mentorName } = useMentorName();
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
-  const location = useLocation();
-  const practiceState = location.state as {
-    practiceQuestion?: string;
-    taskId?: string;
-  } | null;
-  const [activePracticeQuestion, setActivePracticeQuestion] = useState<
-    string | null
-  >(practiceState?.practiceQuestion || null);
 
   // Derive mentor mode from localStorage (set by Dashboard / CrashCourseDashboard on mount)
   const mentorMode =
@@ -261,19 +252,6 @@ const Mentor = () => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Inject practice drill question as a local-only assistant message
-  useEffect(() => {
-    if (practiceState?.practiceQuestion) {
-      const questionMsg: MentorMessage = {
-        role: "assistant",
-        content: `**Practice Drill**\n\n${practiceState.practiceQuestion}\n\n*Type your answer below. I'll give you honest, detailed feedback.*`,
-      };
-      setMessages((prev) => [...prev, questionMsg]);
-      // Clear router state so refresh doesn't re-inject
-      window.history.replaceState({}, "");
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const handleTextareaInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
     const el = e.currentTarget;
     el.style.height = "auto";
@@ -295,12 +273,7 @@ const Mentor = () => {
       return;
     }
 
-    // Wrap first message with practice drill context if active
     let messageText = rawText;
-    if (activePracticeQuestion) {
-      messageText = `[PRACTICE DRILL FEEDBACK REQUEST]\nQuestion: ${activePracticeQuestion}\nMy answer: ${rawText}\n[/PRACTICE DRILL FEEDBACK REQUEST]`;
-      setActivePracticeQuestion(null);
-    }
 
     if (!text) {
       setInput("");

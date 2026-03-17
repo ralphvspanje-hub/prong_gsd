@@ -1,136 +1,188 @@
-# DailyProng
+# ProngGSD
 
 **Your career shouldn't run on vibes.**
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-dailyprong.vercel.app-6366F1?style=flat)](https://dailyprong.vercel.app)
 ![React](https://img.shields.io/badge/React_18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5.8-3178C6?logo=typescript&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?logo=supabase&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite_5-646CFF?logo=vite&logoColor=white)
 
 ---
 
-## The Problem
+## The problem
 
-Most people have a vague idea of where they want to go in their career and no real plan to get there. They take a course, forget it, read an article, forget that too. Without structure and repetition, learning doesn't stick — it just makes you feel productive.
+Most people know roughly where they want their career to go. They just don't have a plan. They take a course, forget it, read an article, forget that too. Isolated learning feels productive but doesn't compound into anything real.
 
-## The Solution
+And when a job interview lands in three weeks, they scramble. Random YouTube videos, undirected LeetCode grinding, hoping effort alone closes the gap.
 
-DailyProng starts with an AI onboarding that actually asks hard questions: where you are, where you want to go, and what's in the way. From that, it builds skill pillars — the specific areas you need to develop — and organizes your learning into themed cycles with daily units.
+## What ProngGSD does
 
-Each morning, you pick a pillar and get a focused learning unit. You read it, answer a reflection question, and the app tracks your progress. An AI mentor knows your full plan and can restructure it if your goals change.
+ProngGSD replaces scattered self-study with structured, adaptive learning plans. An AI onboarding conversation asks hard questions about where you are and what you're trying to get to. From that, it builds **skill pillars** (strategic clusters of abilities you need to develop) and generates a plan that routes you to the best external resources for each skill.
 
-One pillar at a time. Every day.
+You don't consume content inside the app. ProngGSD is a router, pointing you to YouTube tutorials, LeetCode problems, HackerRank challenges, Kaggle datasets, and whatever else fits. An AI mentor tracks your progress and can restructure the plan when your goals shift.
 
-## Key Features
+Interview in three weeks? Launch a crash course. Focused 1-3 week intensive with mock interviews, AI feedback, and mistake tracking. Runs alongside your main learning plan.
 
-- **AI Onboarding** — A structured conversation that maps your goals and skill gaps into pillars and learning phases. Not a form — an actual dialogue.
-- **Daily Learning Units** — Focused content organized into themed cycles, each with multiple section types (concept, application, reflection, hands-on). Generated on demand by Gemini.
-- **Cycle System** — Units group into cycles. Finish a cycle and get a summary, a new one starts. You can also grab a bonus unit, extra resources, or talk to your mentor.
-- **Extra Resources** — AI-generated YouTube search suggestions and practice recommendations after each cycle, calibrated to your current pillar level.
-- **AI Mentor Chat** — Chat with a named mentor who knows your learning architecture. Ask anything, request changes to your plan.
-- **Structural Edits** — The mentor can actually modify your pillars and phases, not just give advice.
-- **Progress Page** — Pillar levels, cycle history, and completion stats. Recharts for the graphs.
-- **History Page** — Every past unit, searchable and filterable.
-- **Demo Mode** — Full read-only walkthrough of the app without signing up.
-- **Dark/Light Theme** — Defaults dark, toggleable in-app.
+---
 
-## Tech Stack
+## Features
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | React 18.3 + Vite 5 |
-| Language | TypeScript 5.8 |
-| UI | shadcn/ui + Tailwind CSS + Radix UI |
-| Routing | React Router v6 |
-| Animations | Framer Motion |
-| Data Fetching | TanStack Query v5 |
-| Forms | React Hook Form + Zod |
-| Charts | Recharts |
-| Backend | Supabase (PostgreSQL + Auth + Edge Functions) |
-| AI | Gemini 3.1 Flash Lite via Google Generative AI REST API |
-| Deployment | Vercel |
+### AI onboarding
+
+Not a form. A multi-turn conversation. The AI captures your career situation, timeline, goals, and skill gaps, then generates pillars, phases, and topic maps. You can optionally upload a resume or LinkedIn PDF to give it more context.
+
+### Sprint-based learning
+
+The default plan format. Open-ended, completion-based cycles. Each sprint focuses on 1-2 pillars with around 10 practice units. No calendar deadline; finish at your pace, check in with the AI, pick your next focus. (The older fixed-week format still works for existing plans.)
+
+### Daily task tracking
+
+Each day shows tasks grouped by pillar. Click to open external resources in a new tab: YouTube searches, LeetCode problem sets, HackerRank domains, curated articles. Check off tasks as you go. Links are platform-aware so you land in the right place.
+
+### AI mentor
+
+You name your mentor. They know your full plan, progress, and goals. You can ask for advice, or request real structural changes: add pillars, swap resources, adjust difficulty, restructure future weeks. The mentor writes the changes back to your plan directly.
+
+### Crash courses and interview prep
+
+Interview prep captures your target role, company, date, weak areas, and format in a short onboarding (3-4 turns), then generates an intensive plan with all blocks upfront, a countdown timer, mock interviews, and mistake journaling. You can also spin up generic crash courses ("Learn SQL in 2 weeks", "Prep for my presentation") that work the same way minus the interview-specific stuff. Up to 3 crash courses can run alongside your main learning plan.
+
+### Mock interviews
+
+The AI conducts mock interviews across behavioral (STAR method), technical/SQL, system design, and case study formats. Each session is a persistent conversation: questions, your answers, then per-question scores and an overall assessment at the end. Results feed into the mistake journal.
+
+### Mistake journal
+
+After each mock, log your key mistakes using a timebox method. The journal tracks patterns across sessions, so recurring weak areas surface on their own. You know what to drill next without guessing.
+
+### Sprint check-ins
+
+Finish a sprint and the AI runs a short review conversation. How did it go? What was too hard, what was too easy? It suggests which pillars to focus on next. You pick, confirm, and the next sprint generates.
+
+### Pillar leveling and pacing
+
+Complete enough blocks at your current level and the pillar levels up (1 through 5). Difficulty signals from check-ins feed into the next block's generation. If everything felt too easy, the next sprint adjusts.
+
+### Progress and analytics
+
+Streak counter with longest streak. Weekly and per-pillar completion charts. Activity heatmap from task timestamps. Pillar level cards with progress toward the next level. Plan summary showing format, pacing, and overall completion.
+
+### History
+
+Searchable archive of every plan block and task. Filter by pillar, week, or sprint.
+
+### Dark/light theme
+
+Defaults dark. Toggle anytime.
+
+---
+
+## Tech stack
+
+| Layer         | Technology                                              |
+| ------------- | ------------------------------------------------------- |
+| Framework     | React 18.3 + Vite 5                                     |
+| Language      | TypeScript 5.8                                          |
+| UI            | shadcn/ui + Tailwind CSS 3.4 + Radix UI                 |
+| Routing       | React Router v6                                         |
+| Animations    | Framer Motion                                           |
+| Data fetching | TanStack Query v5                                       |
+| Forms         | React Hook Form + Zod                                   |
+| Charts        | Recharts                                                |
+| Backend       | Supabase (PostgreSQL + Auth + Edge Functions)           |
+| AI            | Gemini 3.1 Flash Lite via Google Generative AI REST API |
+| Deployment    | Vercel (frontend) + Supabase Cloud (backend)            |
+
+---
 
 ## Architecture
 
-**Cloud-first.** Unlike an offline-first app, all user data lives in Postgres. The app requires Supabase — there's no local fallback for user data.
+All user data lives in Postgres. No local-first fallback; the app requires Supabase.
 
-**AI stays server-side.** There are five Edge Functions (Deno). The client never holds an API key.
+All LLM calls go through ten Supabase Edge Functions (Deno). The client never holds an API key.
 
-| Edge Function | What it does |
-|---------------|-------------|
-| `onboarding-chat` | Runs the onboarding dialogue, writes structured profile to DB |
-| `generate-unit` | Creates unit content from pillar + topic_map + phase context |
-| `process-feedback` | Handles unit feedback, updates pillar progress, manages cycle completion |
-| `mentor-chat` | Stateful conversation with the user's full learning context loaded |
-| `apply-mentor-changes` | Applies structural mutations the mentor proposes (pillars, phases, weights) |
-
-**12 tables, all RLS-scoped.** The schema tracks the full learning architecture: user profile, phases, pillars, topic maps, cycles, units, progress archives, mentor conversations, onboarding state, personal notes, and rate limits.
+| Edge Function                | What it does                                                                            |
+| ---------------------------- | --------------------------------------------------------------------------------------- |
+| `gsd-onboarding-chat`        | Multi-turn onboarding, outputs pillars, phases, topic maps                              |
+| `gsd-interview-onboarding`   | Interview prep mini-onboarding (3-4 turns)                                              |
+| `gsd-crashcourse-onboarding` | Generic crash course setup via AI chat                                                  |
+| `gsd-generate-plan`          | Plan generation (6 modes: sprint, weekly, next sprint, extend, interview, single block) |
+| `gsd-process-checkin`        | Task/block completion, streak tracking, pillar leveling, pacing                         |
+| `gsd-mentor-chat`            | Stateful mentor conversation with full plan context, can propose structural changes     |
+| `gsd-apply-mentor-changes`   | Applies pillar mutations, resource swaps, plan restructuring                            |
+| `gsd-sprint-checkin`         | Sprint review conversation, outputs summary and pillar suggestions                      |
+| `gsd-mock-interview`         | Persistent mock interview sessions with feedback generation                             |
+| `gsd-reset-user-data`        | Data reset (rewind plan only, full reset, or delete account)                            |
 
 ```
 User
   │
   ▼
 ┌────────────────┐     ┌───────────────────┐     ┌──────────────┐
-│   Client        │────▶│  Supabase Edge Fn  │────▶│ Gemini 3.1   │
-│   (React/Vite)  │◀────│  (Deno, key vault) │◀────│ Flash Lite   │
+│   React/Vite   │────▶│  Supabase Edge Fn  │────▶│ Gemini 3.1   │
+│   Client       │◀────│  (Deno, key vault) │◀────│ Flash Lite   │
 └────────────────┘     └───────────────────┘     └──────────────┘
          │
          ▼
 ┌────────────────────────────────────────┐
 │  Supabase PostgreSQL                   │
-│  Pillars, Cycles, Units, Progress,     │
-│  Mentor History, Auth, Rate Limits     │
-└────────────────────────────────────────┘
-         │
-         ▼
-┌────────────────────────────────────────┐
-│  Vercel — dailyprong.vercel.app        │
+│  20+ tables, all RLS-scoped            │
+│  Pillars, Plans, Tasks, Progress,      │
+│  Mocks, Streaks, Mentor History        │
 └────────────────────────────────────────┘
 ```
-
-## How It Works
-
-**1. Onboard** — Complete the AI onboarding chat. It figures out your role, goals, timeline, and skill gaps, then writes your learning plan: pillars, phases, and weighted topic maps.
-
-**2. Learn** — Pick a pillar on the dashboard each day. The app generates a unit from your current cycle's topic and section type. Read, reflect, submit feedback.
-
-**3. Progress** — Feedback drives pillar level and cycle advancement. Finish a cycle and a new themed one begins automatically.
-
-**4. Adjust** — Talk to your mentor when goals change. They can update your pillars, reweight phases, or restructure the whole plan.
 
 ---
 
-## AI-Native Codebase
+## How it works
 
-This project was built with AI as a process, not a shortcut. Features go through a Claude project set up as a virtual CTO before any code is written — it pushes back until the idea holds up. Then: issue in Linear, codebase exploration, implementation plan, execution in Cursor.
+Sign up, optionally upload resume/LinkedIn, do the AI onboarding chat. It maps your role, goals, timeline, and skill gaps into pillars and phases.
 
-The codebase is designed to be navigated by AI agents with zero warm-up time. Every major directory has a `CLAUDE.md` with accurate, current context about what lives there, what the conventions are, and what to avoid.
+The system generates a sprint plan (default) or weekly plan. Each sprint focuses on 1-2 pillars with curated external tasks: YouTube, LeetCode, articles, practice drills. Open your dashboard each day, work through tasks, check them off, build your streak.
+
+When a sprint is done, check in with the AI and pick your next focus. If your goals shift mid-plan, talk to your mentor. They can add pillars, swap resources, adjust difficulty, or restructure the whole thing. Difficulty signals from check-ins automatically tune what comes next.
+
+Interview coming up? Launch a crash course from the nav. Intensive plan, mock interviews, mistake tracking, countdown timer. Doesn't interfere with your main plan.
+
+---
+
+## Project structure
 
 ```
-dailyprong-web/
-├── CLAUDE.md                    ← start here
+prong_gsd/
 ├── src/
-│   ├── pages/
+│   ├── main.tsx                     # Entry point
+│   ├── App.tsx                      # Providers, routes, guards
+│   ├── pages/                       # Route-level components
+│   │   ├── Dashboard.tsx            # Daily task view (sprint/weekly)
+│   │   ├── Onboarding.tsx           # AI onboarding chat
+│   │   ├── SprintCheckin.tsx        # Sprint review + pillar selection
+│   │   ├── MockInterview.tsx        # AI mock interview sessions
+│   │   ├── CrashCourseDashboard.tsx # Crash course task view
+│   │   ├── Mentor.tsx               # AI mentor chat
+│   │   ├── Progress.tsx             # Analytics, streaks, charts
+│   │   ├── History.tsx              # Searchable task archive
+│   │   └── SettingsPage.tsx         # Profile, pillars, danger zone
 │   ├── components/
-│   ├── hooks/
-│   └── integrations/supabase/
-└── supabase/
-    └── functions/
-        ├── onboarding-chat/
-        ├── generate-unit/
-        ├── mentor-chat/
-        ├── apply-mentor-changes/
-        └── process-feedback/
+│   │   ├── Layout.tsx               # Nav shell (desktop + mobile)
+│   │   ├── plan/                    # Task tracker components
+│   │   ├── progress/                # Chart and analytics components
+│   │   ├── history/                 # Archive components
+│   │   └── ui/                      # shadcn/ui primitives
+│   ├── hooks/                       # Auth, theme, mentor name, etc.
+│   └── integrations/supabase/       # Auto-generated client + types
+├── supabase/
+│   ├── migrations/                  # PostgreSQL schema
+│   └── functions/                   # 10 Edge Functions (gsd-* prefixed)
+└── package.json
 ```
-
-Agents log any confusion or outdated description to `AGENT_LOG.md` and fix the relevant `CLAUDE.md` immediately. The context system gets more accurate with every session.
 
 ---
 
-## Running It
+## Running it
 
 ```bash
-cd dailyprong-web
+cd prong_gsd
 npm install
 npm run dev
 ```
@@ -142,9 +194,27 @@ VITE_SUPABASE_URL=...
 VITE_SUPABASE_PUBLISHABLE_KEY=...
 ```
 
-Edge function secrets go in the Supabase dashboard: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`.
+Edge function secrets (set in Supabase dashboard): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`.
 
-Push to `main` — Vercel deploys automatically.
+Push to `main` and Vercel deploys automatically.
+
+---
+
+## How this was built
+
+Features go through a Claude project set up as a virtual CTO before any code gets written. It pushes back until the idea holds up. Then: issue in Linear, codebase exploration, implementation plan, execution.
+
+Every major directory has a `CLAUDE.md` with current context about what lives there and what to watch out for. Agents log confusion to `AGENT_LOG.md` and fix the docs on the spot. The context gets more accurate over time, not less.
+
+---
+
+## Philosophy
+
+Don't be T-shaped. Be a prong.
+
+A T-shaped person is deep in one domain, broad across others. That model made sense when disciplines were separate. They aren't anymore. The engineer needs product sense, the PM needs systems thinking, the data scientist needs to ship. The shape that matters is a fork: multiple sharp tines, connected and deepened over time.
+
+ProngGSD builds your prongs.
 
 ---
 

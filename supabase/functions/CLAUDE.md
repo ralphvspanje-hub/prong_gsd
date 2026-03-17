@@ -4,10 +4,10 @@
 
 Shared Deno modules imported by multiple edge functions.
 
-| Module         | Export           | Used by                                                                           |
-| -------------- | ---------------- | --------------------------------------------------------------------------------- |
-| `rateLimit.ts` | `checkRateLimit` | mentor-chat, generate-plan, onboarding-chat, interview-onboarding, sprint-checkin |
-| `cors.ts`      | `getCorsHeaders` | all functions                                                                     |
+| Module         | Export           | Used by                                                                                              |
+| -------------- | ---------------- | ---------------------------------------------------------------------------------------------------- |
+| `rateLimit.ts` | `checkRateLimit` | mentor-chat, generate-plan, onboarding-chat, interview-onboarding, sprint-checkin, practice-feedback |
+| `cors.ts`      | `getCorsHeaders` | all functions                                                                                        |
 
 Rate limits: 50 calls/user/day (500 for owner via `OWNER_EMAIL` env var), 100 calls/IP/day per endpoint. Auto-cleans rows older than 48h from `api_rate_limits`.
 
@@ -156,6 +156,32 @@ AI mock interview sessions with persistent conversation state. Phase 9 Phase 2 a
 - **Fallback feedback**: If AI doesn't include completion tag on forced end, builds minimal feedback object (score 5).
 - **Duration**: Calculated from `mock_interviews.created_at` to completion time.
 - **Triggered from**: `TaskItem.tsx` (start action via button click), `MockInterview.tsx` (continue/complete actions)
+
+## practice-feedback
+
+Single-shot AI feedback for inline practice questions. Phase 11B addition.
+
+- **Auth**: Bearer JWT → `supabase.auth.getUser()` for user ID
+- **Rate limits**: 100 calls/user/day, 100 calls/IP/day
+- **Env vars**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`
+- **AI model**: `gemini-2.0-flash-lite` via Google Generative AI REST API
+- **Settings**: max_tokens 1500, temperature 0.5
+- **DB writes**: Yes — updates `plan_tasks` (attempt_count, user_answers, last_feedback). Auto-marks `is_completed = true` on attempt 2.
+
+**Input:** `{ task_id, answer (max 2000 chars), attempt (1 or 2) }`
+
+**Logic:**
+
+1. Auth + rate limit
+2. Fetch task, verify ownership, check `resource_type === "practice_question"`, check `attempt_count < 2`
+3. Fetch parent block + pillar for context (pillar name + level)
+4. Build prompt: concise evaluator. Structure: correct → missing → key insight → (attempt 1) improvement hint / (attempt 2) final assessment
+5. Call Gemini, update plan_tasks columns, auto-complete on attempt 2
+6. Return `{ feedback, attempt, completed, can_retry }`
+
+**`user_answers` structure:** `[{ answer, feedback, attempt }]`
+
+- **Triggered from**: `TaskItem.tsx` practice question UI (submit button)
 
 ## process-checkin
 

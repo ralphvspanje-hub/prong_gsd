@@ -54,6 +54,37 @@ const PACING_TONE: Record<string, string> = {
     'Focused and encouraging. "Deep dive time — master this before moving on." Celebrate depth over breadth.',
 };
 
+const APPROVED_PLATFORMS = new Set([
+  "youtube",
+  "leetcode",
+  "hackerrank",
+  "freecodecamp",
+  "kaggle",
+  "github",
+  "mdn web docs",
+  "official docs",
+  "khan academy",
+  "arxiv",
+  "google scholar",
+  "dev.to",
+  "w3schools",
+  "pronggsd",
+]);
+
+function normalizePlatform(platform: string): string {
+  const lower = platform.toLowerCase().trim();
+  for (const approved of APPROVED_PLATFORMS) {
+    if (lower.includes(approved) || approved.includes(lower)) return approved;
+  }
+  if (lower.includes("mdn")) return "mdn web docs";
+  if (lower.includes("fcc") || lower.includes("free code camp"))
+    return "freecodecamp";
+  if (lower.includes("khan")) return "khan academy";
+  if (lower.includes("scholar")) return "google scholar";
+  // Unknown → YouTube (free catch-all)
+  return "youtube";
+}
+
 // Sprint unit counts based on time commitment
 const SPRINT_UNITS: Record<string, [number, number]> = {
   light: [6, 8], // ~15-30min/day commitment
@@ -65,6 +96,50 @@ function getSprintIntensity(dailyMinutes: number): string {
   if (dailyMinutes <= 30) return "light";
   if (dailyMinutes <= 60) return "moderate";
   return "intensive";
+}
+
+// Approved platforms — only free, well-known sources allowed
+const APPROVED_PLATFORMS = [
+  "YouTube",
+  "LeetCode",
+  "HackerRank",
+  "freeCodeCamp",
+  "Kaggle",
+  "GitHub",
+  "MDN Web Docs",
+  "Official Docs",
+  "Khan Academy",
+  "arXiv",
+  "Google Scholar",
+  "Dev.to",
+  "W3Schools",
+  "ProngGSD",
+] as const;
+
+// Normalize AI-returned platform names to approved list (fallback: YouTube)
+function normalizeplatform(raw: string): string {
+  const lower = raw.toLowerCase();
+  for (const p of APPROVED_PLATFORMS) {
+    if (p.toLowerCase() === lower) return p;
+  }
+  // Fuzzy match common variants
+  if (lower.includes("youtube")) return "YouTube";
+  if (lower.includes("leetcode")) return "LeetCode";
+  if (lower.includes("hackerrank")) return "HackerRank";
+  if (lower.includes("freecodecamp") || lower.includes("fcc"))
+    return "freeCodeCamp";
+  if (lower.includes("kaggle")) return "Kaggle";
+  if (lower.includes("github")) return "GitHub";
+  if (lower.includes("mdn")) return "MDN Web Docs";
+  if (lower.includes("khan")) return "Khan Academy";
+  if (lower.includes("arxiv")) return "arXiv";
+  if (lower.includes("scholar")) return "Google Scholar";
+  if (lower.includes("dev.to")) return "Dev.to";
+  if (lower.includes("w3school")) return "W3Schools";
+  if (lower.includes("docs") || lower.includes("documentation"))
+    return "Official Docs";
+  // Default fallback — YouTube has content on everything
+  return "YouTube";
 }
 
 // Maps pillar name keywords → curated_resources skill_area values
@@ -730,13 +805,35 @@ TASK RULES:
   * Setup/installation tasks: 15–30 min.
 - A single task CAN exceed the daily per-pillar budget. If a resource genuinely takes 90 minutes, say 90 minutes. The learner will adjust their day.
 - It is BETTER to have fewer tasks with accurate estimates than many tasks with artificially low estimates.
+- PLATFORM HIERARCHY (use in this priority order):
+  1. YouTube (DEFAULT — use for ~60-70% of tasks) — tutorials, lectures, walkthroughs, project builds, concept explanations, interview prep, tool demos. Generate SPECIFIC search queries naming known educators, channels, universities, or series. Examples:
+     * "Fireship Docker in 100 seconds"
+     * "Stanford CS229 lecture 1 introduction to machine learning"
+     * "Traversy Media React crash course 2024"
+     * "Corey Schafer Python pandas tutorial"
+     * "Tech With Tim Flask REST API tutorial"
+     * "freeCodeCamp full React course"
+     A good YouTube search query is basically a curated recommendation. Be specific — name the creator or series.
+  2. LeetCode / HackerRank — ONLY for "solve this coding problem" tasks (algorithms, data structures, SQL challenges)
+  3. Official Docs / MDN Web Docs — ONLY for "read the docs on X" reference tasks
+  4. GitHub — ONLY for "explore this repo" or "read this codebase" tasks
+  5. freeCodeCamp / Khan Academy / W3Schools — for structured tutorial tracks
+  6. Kaggle — for data science datasets/competitions
+  7. arXiv / Google Scholar — for research papers
+  8. Dev.to — for community articles/blog posts
+  9. ProngGSD — for practice_question and mock_interview tasks only
+- BANNED: Udemy, Coursera, edX, LinkedIn Learning, Pluralsight, DataCamp, Skillshare, Codecademy Pro, or ANY paid platform. If you're tempted to suggest a paid platform, use YouTube instead — there's a free equivalent for everything.
+- When in doubt, use YouTube. It has free content on literally everything.
 - Use curated resource URLs when they match. Set resource_type to "curated" and provide the url.
 - When no curated resource fits, set resource_type to "search_query", url to null, and provide a specific search_query.
-- For mock interview practice tasks, set resource_type to "mock_interview", platform to "ProngGSD", url to null, search_query to null. Action should describe the interview type with a "MOCK:" prefix (e.g., "MOCK: Behavioral interview — STAR method practice", "MOCK: SQL mock — window functions and CTEs"). These are handled in-app.
+- For practice questions that test understanding, set resource_type to "practice_question", platform to "ProngGSD", url to null, search_query to null. The action text IS the question itself — write a clear, specific, answerable question. Examples:
+  * "What is the difference between INNER JOIN and LEFT JOIN? When would you use each?"
+  * "Explain the time complexity of quicksort and when it degrades to O(n^2)."
+  * "A user reports that your web app loads slowly on mobile. Walk through your debugging approach step by step."
+  These are answered inline in the app with AI feedback — no external resource needed.
+- Include ${isSprint ? "1 practice_question task per block as a knowledge check at the end" : "1 practice_question task per block as a reinforcement check at the end"}.
+- For mock interview practice (full multi-turn simulation ONLY), set resource_type to "mock_interview", platform to "ProngGSD", url to null, search_query to null. Action should describe the interview type with a "MOCK:" prefix (e.g., "MOCK: Behavioral interview — STAR method practice"). Use sparingly — max 1 mock interview per sprint/plan.
 - Each task should be concrete and completable in one sitting.
-- Include a healthy mix: hands-on practice (exercises, challenges), reading (docs, articles), AND video content (YouTube lectures, talks, tutorials).
-- For conceptual, theory, or lecture-style tasks, generate YouTube-specific search queries (prefix with "youtube: "). E.g., "youtube: Stanford CS229 introduction to machine learning lecture" or "youtube: Andrej Karpathy LLM explained". Be specific — name known educators, universities, or channels when relevant to the topic.
-- For hands-on practice tasks, keep using platform-specific resources or general search queries.
 - The "why_text" should connect the task to their goals and explain the learning value.
 
 Respond with ONLY valid JSON, no markdown fences, no commentary:
@@ -757,13 +854,13 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
     },
     {
       "task_order": 2,
-      "action": "MOCK: Behavioral interview — STAR method practice",
+      "action": "What is the difference between GROUP BY and PARTITION BY? When would you use each?",
       "platform": "ProngGSD",
-      "resource_type": "mock_interview",
+      "resource_type": "practice_question",
       "url": null,
       "search_query": null,
-      "estimated_time_minutes": 30,
-      "why_text": "Practicing under pressure reveals gaps before the real interview."
+      "estimated_time_minutes": 15,
+      "why_text": "Testing your understanding solidifies what you learned."
     }
   ],
   "completion_criteria": "How to know when this block is done"
@@ -831,8 +928,12 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       user_id: userId,
       task_order: task.task_order || 1,
       action: task.action || "Complete the task",
-      platform: task.platform || "Google",
-      resource_type: ["curated", "mock_interview"].includes(task.resource_type)
+      platform: normalizePlatform(task.platform || "YouTube"),
+      resource_type: [
+        "curated",
+        "mock_interview",
+        "practice_question",
+      ].includes(task.resource_type)
         ? task.resource_type
         : "search_query",
       url: task.resource_type === "curated" ? task.url || null : null,
@@ -1175,15 +1276,17 @@ async function generateInterviewPlan(
 - Final week focuses on review, practice tests, and consolidation.
 - Difficulty should ramp: Week 1 = foundation, Week 2+ = deep practice at target difficulty.
 - ${intensity === "100_percent" ? "This is a full-time sprint. Pack every day with meaningful work." : "Respect the time budget but don't waste a single minute."}
-- Do NOT include mock interview slots (this is not interview prep).`
+- Do NOT include mock interview slots (this is not interview prep).
+- Each block should have 2-3 practice questions (resource_type: "practice_question") to reinforce understanding — more hands-on since this is a crash course.`
     : `INTERVIEW PREP PLAN RULES:
 - Generate a ${planWeeks}-week plan with DAILY milestones — every single day must have a clear focus.
 - Each week has ALL pillars active. Interview prep is parallel, not sequential.
 - For each pillar each week, provide a specific weekly_goal that builds on the previous week.
-- Include mock interview slots: 1-3 per day depending on intensity. Mark these clearly with "MOCK:" prefix in the weekly_goal.
+- Include at most 1 mock interview slot per plan. Mark with "MOCK:" prefix in the weekly_goal. Place it in the final week — the learner should practice with questions first.
+- Each block should have 3-4 practice questions (resource_type: "practice_question") — scenario questions, case questions, behavioral prompts tailored to the target role/company. These are the PRIMARY practice mechanism.
 - Week 1 starts with CONTEXT: how companies typically test each skill. Then practice.
-- Final week is heavy on mock interviews and review — simulating real interview conditions.
-- Difficulty should ramp: Week 1 = foundation + context, Week 2+ = practice + mocks at interview difficulty.
+- Final week is heavy on practice questions and review — simulating real interview conditions.
+- Difficulty should ramp: Week 1 = foundation + context, Week 2+ = practice questions at interview difficulty.
 - ${intensity === "100_percent" ? "This is a full-time sprint. Pack every day with meaningful work." : "Respect the time budget but don't waste a single minute."}`;
 
   const contextFirstApproach = isGeneric

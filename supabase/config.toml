@@ -24,5 +24,8 @@ verify_jwt = false
 [functions.gsd-sprint-checkin]
 verify_jwt = false
 
+[functions.gsd-practice-feedback]
+verify_jwt = false
+
 [functions.gsd-reset-user-data]
 verify_jwt = false

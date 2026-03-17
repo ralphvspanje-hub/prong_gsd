@@ -344,3 +344,5 @@ If you resolved it, also update the relevant CLAUDE.md immediately and mark this
 **File/folder affected:** `CLAUDE.md` routes table, gotchas section
 **What I did:** Updated CLAUDE.md with new routes (`/crash-course`, `/crash-course/:planId`, `/crashcourse-onboarding`), new edge function (`gsd-crashcourse-onboarding`), new column (`crashcourse_type`), and Phase 9.5 gotchas covering all architectural changes.
 **Status:** Fixed
+
+## 2026-03-17 — Phase 11B: Inline Practice Questions — No issues found
