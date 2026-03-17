@@ -758,24 +758,17 @@ TASK RULES:
   * Medium (estimated_time_minutes: 40): Standard tutorials, moderate exercises, documentation deep-dives, hands-on practice.
   * Long (estimated_time_minutes: 60): Full lectures, comprehensive tutorials, complex hands-on projects, in-depth courses.
 - Use ONLY these three values: 20, 40, or 60. No other values.
-- PLATFORM HIERARCHY (use in this priority order):
-  1. YouTube (DEFAULT — use for ~60-70% of tasks) — tutorials, lectures, walkthroughs, project builds, concept explanations, interview prep, tool demos. Generate broad, topic-focused search queries. Do NOT name specific creators, channels, video titles, or series — the learner will pick the best result. Focus on the topic + skill level + format. Examples:
-     * "Docker tutorial beginner explained"
-     * "machine learning introduction lecture"
-     * "React crash course 2024"
-     * "Python pandas data analysis tutorial"
-     * "Flask REST API tutorial beginner"
-     * "SQL window functions explained with examples"
-  2. LeetCode / HackerRank — ONLY for "solve this coding problem" tasks (algorithms, data structures, SQL challenges)
-  3. Official Docs / MDN Web Docs — ONLY for "read the docs on X" reference tasks
-  4. GitHub — ONLY for "explore this repo" or "read this codebase" tasks
-  5. freeCodeCamp / Khan Academy / W3Schools — for structured tutorial tracks
-  6. Kaggle — for data science datasets/competitions
-  7. arXiv / Google Scholar — for research papers
-  8. Dev.to — for community articles/blog posts
-  9. ProngGSD — for practice_question and mock_interview tasks only
-- BANNED: Udemy, Coursera, edX, LinkedIn Learning, Pluralsight, DataCamp, Skillshare, Codecademy Pro, or ANY paid platform. If you're tempted to suggest a paid platform, use YouTube instead — there's a free equivalent for everything.
-- When in doubt, use YouTube. It has free content on literally everything.
+- PLATFORM HIERARCHY:
+  1. YouTube (DEFAULT — use for ~50-60% of tasks) — tutorials, lectures, walkthroughs, explanations, demos. Works for ANY topic. Generate broad, topic-focused search queries. Do NOT name specific creators, channels, video titles, or series — the learner will pick the best result. Focus on the topic + skill level + format.
+  2. Topic-appropriate platforms — use for ~20-30% of tasks to add variety. Pick platforms that fit the subject:
+     * Tech/coding: LeetCode, HackerRank (problem solving), Official Docs / MDN (reference), GitHub (codebases), freeCodeCamp / W3Schools (tutorials)
+     * Language/test prep: Official test practice sites (search for "TOEFL practice test free", "Cambridge English practice"), news/reading sites (search for "BBC Learning English", "English reading practice intermediate")
+     * Data science: Kaggle (datasets/competitions), Google Scholar / arXiv (papers)
+     * Business/general: Khan Academy (courses), Google Scholar (research), industry blogs
+     * Any topic: Google search for "[topic] practice exercises", "[topic] official practice test", "[topic] reading materials"
+  3. ProngGSD — for practice_question and mock_interview tasks only
+- BANNED: Udemy, Coursera, edX, LinkedIn Learning, Pluralsight, DataCamp, Skillshare, Codecademy Pro, or ANY paid/paywalled platform.
+- VARIETY IS IMPORTANT: Do NOT make every task a YouTube video. Mix in reading, practice exercises, and hands-on activities. A good block has 2-3 YouTube tasks and 1-2 non-YouTube tasks (plus the practice question).
 - Use curated resource URLs when they match. Set resource_type to "curated" and provide the url.
 - When no curated resource fits, set resource_type to "search_query", url to null, and provide a specific search_query.
 - For practice questions that test understanding, set resource_type to "practice_question", platform to "ProngGSD", url to null, search_query to null. The action text IS the question itself — write a clear, specific, answerable question. Examples:
