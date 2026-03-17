@@ -441,7 +441,11 @@ export const TaskItem = memo(({ task, onToggle }: TaskItemProps) => {
       {task.estimated_time_minutes && (
         <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0 pt-0.5">
           <Clock className="h-3 w-3" />
-          {task.estimated_time_minutes}m
+          {task.estimated_time_minutes <= 20
+            ? "Short"
+            : task.estimated_time_minutes <= 40
+              ? "Medium"
+              : "Long"}
         </div>
       )}
     </motion.div>

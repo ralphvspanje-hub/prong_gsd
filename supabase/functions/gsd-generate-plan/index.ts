@@ -753,23 +753,19 @@ ${setupContext}${firstBlockInstruction}${extraContext}${buildDifficultyContext(p
 TASK RULES:
 - Generate ${minTasks === maxTasks ? `exactly ${minTasks}` : `${minTasks}–${maxTasks}`} ${unitLabel}.${isSprint ? `\n- This is a SPRINT block — each unit should be completable in one practice session (~${minutesForThisPillar} minutes). The learner does these at their own pace (1-2 per day).` : ""}
 - ${isSprint ? "Sprint" : "Weekly"} time budget is approximately ${weeklyBudget} minutes (${minutesForThisPillar} min/day${isSprint ? "" : `, ${daysPerWeek} days/week`}), but this is a GUIDELINE — quality matters more than fitting a budget.
-- Estimate each task INDIVIDUALLY based on what the resource actually requires:
-  * YouTube videos/lectures: estimate the ACTUAL video length. A deep-dive lecture is 60–120 min, a tutorial 15–30 min. Do NOT compress to fit the daily budget.
-  * Hands-on practice (drills, exercises, coding challenges): 20–60 min depending on complexity.
-  * Reading (articles, docs, guides): 15–30 min.
-  * Mock interviews: 20–40 min.
-  * Setup/installation tasks: 15–30 min.
-- A single task CAN exceed the daily per-pillar budget. If a resource genuinely takes 90 minutes, say 90 minutes. The learner will adjust their day.
-- It is BETTER to have fewer tasks with accurate estimates than many tasks with artificially low estimates.
+- Classify each task as one of three sizes using estimated_time_minutes:
+  * Short (estimated_time_minutes: 20): Quick concept videos, short reads, setup tasks, practice questions, brief exercises.
+  * Medium (estimated_time_minutes: 40): Standard tutorials, moderate exercises, documentation deep-dives, hands-on practice.
+  * Long (estimated_time_minutes: 60): Full lectures, comprehensive tutorials, complex hands-on projects, in-depth courses.
+- Use ONLY these three values: 20, 40, or 60. No other values.
 - PLATFORM HIERARCHY (use in this priority order):
-  1. YouTube (DEFAULT — use for ~60-70% of tasks) — tutorials, lectures, walkthroughs, project builds, concept explanations, interview prep, tool demos. Generate SPECIFIC search queries naming known educators, channels, universities, or series. Examples:
-     * "Fireship Docker in 100 seconds"
-     * "Stanford CS229 lecture 1 introduction to machine learning"
-     * "Traversy Media React crash course 2024"
-     * "Corey Schafer Python pandas tutorial"
-     * "Tech With Tim Flask REST API tutorial"
-     * "freeCodeCamp full React course"
-     A good YouTube search query is basically a curated recommendation. Be specific — name the creator or series.
+  1. YouTube (DEFAULT — use for ~60-70% of tasks) — tutorials, lectures, walkthroughs, project builds, concept explanations, interview prep, tool demos. Generate broad, topic-focused search queries. Do NOT name specific creators, channels, video titles, or series — the learner will pick the best result. Focus on the topic + skill level + format. Examples:
+     * "Docker tutorial beginner explained"
+     * "machine learning introduction lecture"
+     * "React crash course 2024"
+     * "Python pandas data analysis tutorial"
+     * "Flask REST API tutorial beginner"
+     * "SQL window functions explained with examples"
   2. LeetCode / HackerRank — ONLY for "solve this coding problem" tasks (algorithms, data structures, SQL challenges)
   3. Official Docs / MDN Web Docs — ONLY for "read the docs on X" reference tasks
   4. GitHub — ONLY for "explore this repo" or "read this codebase" tasks
@@ -805,7 +801,7 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       "resource_type": "curated",
       "url": "https://...",
       "search_query": null,
-      "estimated_time_minutes": 45,
+      "estimated_time_minutes": 40,
       "why_text": "Why this task matters"
     },
     {
@@ -815,7 +811,7 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       "resource_type": "practice_question",
       "url": null,
       "search_query": null,
-      "estimated_time_minutes": 15,
+      "estimated_time_minutes": 20,
       "why_text": "Testing your understanding solidifies what you learned."
     }
   ],
