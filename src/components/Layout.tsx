@@ -196,20 +196,20 @@ export const Layout = ({ children }: { children: ReactNode }) => {
               <Button
                 variant="ghost"
                 size="sm"
-                className="gap-1.5 text-muted-foreground hidden md:flex"
+                className="gap-1.5 text-muted-foreground flex"
                 onClick={() => navigate("/dashboard")}
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
-                Back to Learning
+                <span className="hidden md:inline">Back to Learning</span>
               </Button>
             ) : (
               <Button
                 size="sm"
-                className="gap-1.5 bg-orange-500 hover:bg-orange-600 text-white hidden md:flex"
+                className="gap-1.5 bg-orange-500 hover:bg-orange-600 text-white flex"
                 onClick={handleCrashCourseClick}
               >
                 <Zap className="h-3.5 w-3.5" />
-                Crash Course
+                <span className="hidden md:inline">Crash Course</span>
               </Button>
             )}
             <Button

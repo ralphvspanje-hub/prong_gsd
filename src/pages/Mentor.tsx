@@ -509,6 +509,15 @@ const Mentor = () => {
               >
                 <ScrollArea className="flex-1">
                   <div className="space-y-4 pt-4 pb-4 pr-2">
+                    {messages.length === 0 && (
+                      <div className="flex justify-start">
+                        <div className="max-w-[85%]">
+                          <div className="bg-card text-card-foreground border border-border rounded-lg px-4 py-3 text-sm leading-relaxed">
+                            <ReactMarkdown>{openingMessage}</ReactMarkdown>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <AnimatePresence>
                       {messages.map((msg, i) => {
                         const { cleanContent, changes } =
