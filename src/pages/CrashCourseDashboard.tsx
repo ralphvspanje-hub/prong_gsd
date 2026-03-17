@@ -3,7 +3,7 @@ import { useNavigate, Navigate, Link, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { StreakCounter } from "@/components/plan/StreakCounter";
-import { PacingBanner } from "@/components/plan/PacingBanner";
+
 import { WeeklyGoalCard } from "@/components/plan/WeeklyGoalCard";
 import { DailyTaskList } from "@/components/plan/DailyTaskList";
 import { CheckinModal } from "@/components/plan/CheckinModal";
@@ -208,14 +208,6 @@ const CrashCourseDashboard = () => {
   // ---- Derived state ----
 
   const currentWeekNumber = currentBlocks?.[0]?.week_number;
-
-  // Pacing notes — limit to 1 for crash courses to avoid repetition
-  const pacingNotes = useMemo(() => {
-    const notes = (currentBlocks || [])
-      .map((b) => b.pacing_note)
-      .filter(Boolean) as string[];
-    return notes.slice(0, 1);
-  }, [currentBlocks]);
 
   const pillarGoals = useMemo(() => {
     if (!currentBlocks || !pillars) return [];
@@ -582,9 +574,6 @@ const CrashCourseDashboard = () => {
 
         {/* Streak counter */}
         <StreakCounter progress={progress || null} />
-
-        {/* Pacing banner */}
-        <PacingBanner pacingNotes={pacingNotes} />
 
         {/* Weekly goal card */}
         {currentWeekNumber && pillarGoals.length > 0 && (

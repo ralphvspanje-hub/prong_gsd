@@ -738,7 +738,6 @@ TASK RULES:
 - For conceptual, theory, or lecture-style tasks, generate YouTube-specific search queries (prefix with "youtube: "). E.g., "youtube: Stanford CS229 introduction to machine learning lecture" or "youtube: Andrej Karpathy LLM explained". Be specific — name known educators, universities, or channels when relevant to the topic.
 - For hands-on practice tasks, keep using platform-specific resources or general search queries.
 - The "why_text" should connect the task to their goals and explain the learning value.
-${pacingProfile === "intensive" ? '- PACING NOTE: Write a short motivational message about their deadline or goal. Focus on urgency and encouragement — reference their target company or role if known. Do NOT mention time budgets or minutes per day. Examples: "Your interview is around the corner — nail this block and you\'ll walk in confident.", "Every rep here is one less surprise in the real interview. Push through."' : pacingProfile === "sprint" ? '- PACING NOTE: Write an encouraging note about deep-diving into this pillar. Emphasize depth over breadth. Example: "This sprint is all about mastering the fundamentals — take your time with each unit and build real understanding."' : "- PACING NOTE: Write a brief note about the learner's pace and what to focus on this week."}
 
 Respond with ONLY valid JSON, no markdown fences, no commentary:
 {
@@ -767,7 +766,6 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
       "why_text": "Practicing under pressure reveals gaps before the real interview."
     }
   ],
-  "pacing_note": "Brief pacing/motivational note for the learner",
   "completion_criteria": "How to know when this block is done"
 }`;
 
@@ -811,7 +809,12 @@ Respond with ONLY valid JSON, no markdown fences, no commentary:
         `${isSprint ? "Sprint" : "Week"} ${weekNumber} — ${pillarName}`,
       weekly_goal: block.weekly_goal || weeklyGoal,
       context_brief: block.context_brief || null,
-      pacing_note: block.pacing_note || null,
+      pacing_note:
+        pacingProfile === "intensive"
+          ? null
+          : pacingProfile === "sprint"
+            ? "Focus on depth over breadth — take your time with each unit and build real understanding."
+            : "Work through tasks at your own pace. Quality matters more than speed.",
       completion_criteria: block.completion_criteria || null,
       is_completed: false,
     })
