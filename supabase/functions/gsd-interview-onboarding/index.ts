@@ -189,13 +189,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch resume/LinkedIn context if available
-    const { data: profile } = await supabase
-      .from("user_profile")
-      .select("resume_text, linkedin_context, interview_company_context")
-      .eq("user_id", userId)
-      .maybeSingle();
-
     const turnCount = (messages || []).filter(
       (m: any) => m.role === "user",
     ).length;
@@ -203,14 +196,23 @@ Deno.serve(async (req) => {
     const todayStr = new Date().toISOString().split("T")[0];
     systemPrompt += `\n\nToday's date is ${todayStr}. Use this to calculate interview_date from relative references like "2 weeks from now".`;
 
-    if (profile?.resume_text) {
-      systemPrompt += `\n\nRESUME CONTEXT (use to understand their background and suggest relevant pillars):\n${profile.resume_text.slice(0, 3000)}`;
-    }
-    if (profile?.linkedin_context) {
-      systemPrompt += `\n\nLINKEDIN CONTEXT (use to understand their experience level):\n${profile.linkedin_context.slice(0, 3000)}`;
-    }
-    if (profile?.interview_company_context) {
-      systemPrompt += `\n\nJOB DESCRIPTION / COMPANY CONTEXT (use this to tailor your pillar recommendations and interview prep strategy):\n${profile.interview_company_context.slice(0, 4000)}`;
+    // Only fetch profile context on start — it's already in conversation history on continue
+    if (action === "start") {
+      const { data: profile } = await supabase
+        .from("user_profile")
+        .select("resume_text, linkedin_context, interview_company_context")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (profile?.resume_text) {
+        systemPrompt += `\n\nRESUME CONTEXT (use to understand their background and suggest relevant pillars):\n${profile.resume_text.slice(0, 3000)}`;
+      }
+      if (profile?.linkedin_context) {
+        systemPrompt += `\n\nLINKEDIN CONTEXT (use to understand their experience level):\n${profile.linkedin_context.slice(0, 3000)}`;
+      }
+      if (profile?.interview_company_context) {
+        systemPrompt += `\n\nJOB DESCRIPTION / COMPANY CONTEXT (use this to tailor your pillar recommendations and interview prep strategy):\n${profile.interview_company_context.slice(0, 4000)}`;
+      }
     }
 
     if (turnCount >= 5) {

@@ -160,7 +160,7 @@ ${attempt === 1 ? "  4. One specific thing to focus on if they retry" : "  4. Fi
 - Use plain text, no markdown headers. Use bullet points sparingly.`;
 
     // ---- Call Gemini ----
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${geminiApiKey}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${geminiApiKey}`;
     const geminiRes = await fetch(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
