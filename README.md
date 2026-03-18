@@ -55,6 +55,10 @@ The AI conducts mock interviews across behavioral (STAR method), technical/SQL, 
 
 After each mock, log your key mistakes using a timebox method. The journal tracks patterns across sessions, so recurring weak areas surface on their own. You know what to drill next without guessing.
 
+### Practice questions
+
+Some tasks are practice questions that render inline instead of linking to an external site. You type your answer in a text box, submit it, and the AI gives targeted feedback. You get up to two attempts — after the first round of feedback you can revise and retry. The task auto-completes after your second attempt. You can't check it off until you've given it at least one shot.
+
 ### Sprint check-ins
 
 Finish a sprint and the AI runs a short review conversation. How did it go? What was too hard, what was too easy? It suggests which pillars to focus on next. You pick, confirm, and the next sprint generates.
@@ -99,7 +103,7 @@ Defaults dark. Toggle anytime.
 
 All user data lives in Postgres. No local-first fallback; the app requires Supabase.
 
-All LLM calls go through ten Supabase Edge Functions (Deno). The client never holds an API key.
+All LLM calls go through eleven Supabase Edge Functions (Deno). The client never holds an API key.
 
 | Edge Function                | What it does                                                                            |
 | ---------------------------- | --------------------------------------------------------------------------------------- |
@@ -112,6 +116,7 @@ All LLM calls go through ten Supabase Edge Functions (Deno). The client never ho
 | `gsd-apply-mentor-changes`   | Applies pillar mutations, resource swaps, plan restructuring                            |
 | `gsd-sprint-checkin`         | Sprint review conversation, outputs summary and pillar suggestions                      |
 | `gsd-mock-interview`         | Persistent mock interview sessions with feedback generation                             |
+| `gsd-practice-feedback`      | Single-shot AI feedback on practice question answers (max 2 attempts)                   |
 | `gsd-reset-user-data`        | Data reset (rewind plan only, full reset, or delete account)                            |
 
 ```
@@ -173,7 +178,7 @@ prong_gsd/
 │   └── integrations/supabase/       # Auto-generated client + types
 ├── supabase/
 │   ├── migrations/                  # PostgreSQL schema
-│   └── functions/                   # 10 Edge Functions (gsd-* prefixed)
+│   └── functions/                   # 11 Edge Functions (gsd-* prefixed)
 └── package.json
 ```
 
