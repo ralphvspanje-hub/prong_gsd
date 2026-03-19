@@ -1,6 +1,6 @@
 # ProngGSD
 
-**Your career shouldn't run on vibes.**
+**Your career shouldn't run on vibes. Start now for free: prong-gsd.vercel.app** 
 
 ![React](https://img.shields.io/badge/React_18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5.8-3178C6?logo=typescript&logoColor=white)
