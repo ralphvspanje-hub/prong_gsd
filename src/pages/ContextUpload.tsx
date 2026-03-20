@@ -306,8 +306,8 @@ const ContextUpload = () => {
                   <ol className="list-decimal pl-4 space-y-0.5">
                     <li>Go to your own LinkedIn profile page</li>
                     <li>
-                      Click the <strong>"Resources"</strong> button in the top
-                      header (where your name is)
+                      Click <strong>"Resources"</strong> or the{" "}
+                      <strong>three-dot menu (···)</strong> near your name
                     </li>
                     <li>
                       Click <strong>"Save to PDF"</strong>

@@ -611,7 +611,8 @@ const SettingsPage = () => {
               </div>
               <p className="text-xs text-muted-foreground">
                 Upload your LinkedIn profile as PDF (max 5 MB). To export: go to
-                your LinkedIn profile → click "Resources" → "Save to PDF".
+                your LinkedIn profile → click "Resources" or the ··· menu →
+                "Save to PDF".
               </p>
             </div>
             <div className="space-y-2">

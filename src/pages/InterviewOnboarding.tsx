@@ -585,7 +585,8 @@ const InterviewOnboarding = () => {
                   <div className="flex gap-2 p-2 rounded-lg bg-muted/50 text-xs text-muted-foreground">
                     <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                     <span>
-                      LinkedIn → your profile → Resources → Save to PDF
+                      LinkedIn → your profile → Resources or ··· menu → Save to
+                      PDF
                     </span>
                   </div>
                 </CardContent>
