@@ -1,28 +1,7 @@
-/** Parse a PDF file into plain text using pdfjs-dist (workerless — fine for small PDFs like resumes). */
+/** Parse a PDF file into plain text using unpdf. */
 export async function parsePdf(file: File): Promise<string> {
-  const pdfjsLib = await import("pdfjs-dist");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
-
+  const { extractText } = await import("unpdf");
   const arrayBuffer = await file.arrayBuffer();
-
-  // Timeout after 10s to prevent infinite hangs
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(
-      () => reject(new Error("PDF parsing timed out. Try a smaller file.")),
-      10000,
-    ),
-  );
-
-  const pdf = await Promise.race([
-    pdfjsLib.getDocument({ data: arrayBuffer }).promise,
-    timeout,
-  ]);
-
-  const pages: string[] = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    pages.push(textContent.items.map((item: any) => item.str).join(" "));
-  }
-  return pages.join("\n\n");
+  const { text } = await extractText(new Uint8Array(arrayBuffer));
+  return text;
 }

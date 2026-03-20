@@ -2,7 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
-// Polyfill Promise.withResolvers for older browsers (needed by pdfjs-dist v4)
+// Polyfill Promise.withResolvers for older browsers (needed by unpdf/pdfjs internals)
 if (typeof (Promise as any).withResolvers !== "function") {
   (Promise as any).withResolvers = function () {
     let resolve: any, reject: any;
