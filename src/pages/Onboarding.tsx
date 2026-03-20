@@ -183,6 +183,7 @@ const Onboarding = () => {
       ...messages,
       { role: "user" as const, content: userMessage },
     ];
+    const prevMessages = messages;
     setMessages(newMessages);
     setLoading(true);
 
@@ -230,6 +231,8 @@ const Onboarding = () => {
         })
         .eq("user_id", user!.id);
     } catch (err: any) {
+      setMessages(prevMessages);
+      setInput(userMessage);
       toast.error("Failed to send message: " + err.message);
     }
     setLoading(false);

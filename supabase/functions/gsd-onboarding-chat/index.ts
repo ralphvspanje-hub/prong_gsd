@@ -205,13 +205,19 @@ Deno.serve(async (req) => {
       return jsonRes({ error: "messages array cannot be empty" }, 400);
     }
 
-    for (const msg of messages || []) {
-      const len = typeof msg.content === "string" ? msg.content.length : 0;
-      if (msg.role === "user" && len > 2000) {
-        return jsonRes({ error: "Message too long" }, 400);
-      }
-      if (msg.role === "assistant" && len > 16000) {
-        return jsonRes({ error: "Message too long" }, 400);
+    // Only validate the latest user message — don't reject the whole
+    // conversation because of a prior message or a long AI response
+    if (action === "continue" && messages?.length) {
+      const lastMsg = messages[messages.length - 1];
+      if (
+        lastMsg.role === "user" &&
+        typeof lastMsg.content === "string" &&
+        lastMsg.content.length > 5000
+      ) {
+        return jsonRes(
+          { error: `Message too long. Max 5000 characters.` },
+          400,
+        );
       }
     }
 

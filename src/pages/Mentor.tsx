@@ -282,6 +282,7 @@ const Mentor = () => {
 
     // Display raw text in chat bubble, send wrapped text to API/DB
     const userMsg: MentorMessage = { role: "user", content: rawText };
+    const prevMessages = messages;
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setLoading(true);
@@ -336,6 +337,8 @@ const Mentor = () => {
         content: data.message,
       });
     } catch (err: any) {
+      setMessages(prevMessages);
+      if (!text) setInput(rawText);
       toast.error("Failed to send message: " + err.message);
     }
     setLoading(false);

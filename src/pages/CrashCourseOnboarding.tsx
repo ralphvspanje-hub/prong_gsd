@@ -52,7 +52,7 @@ interface CrashCourseOutputs {
   time_commitment: string;
 }
 
-const MAX_MSG_LENGTH = 3000;
+const MAX_MSG_LENGTH = 5000;
 
 const TEXTAREA_BASE =
   "w-full resize-none bg-transparent text-base text-foreground placeholder:text-muted-foreground focus:outline-none [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-track]:mt-5 [&::-webkit-scrollbar-track]:pb-2 [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-[3px] [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-clip-content [&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground";
@@ -156,6 +156,7 @@ const CrashCourseOnboarding = () => {
       ...messages,
       { role: "user", content: userMessage },
     ];
+    const prevMessages = messages;
     setMessages(newMessages);
     setLoading(true);
 
@@ -190,6 +191,9 @@ const CrashCourseOnboarding = () => {
         ]);
       }
     } catch (err: any) {
+      // Roll back — don't let a failed message poison the conversation
+      setMessages(prevMessages);
+      setInput(userMessage);
       toast.error("Failed to send message: " + err.message);
     }
     setLoading(false);
