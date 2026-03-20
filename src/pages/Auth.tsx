@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { Zap } from "lucide-react";
+import { Mail, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 const Auth = () => {
@@ -13,6 +13,7 @@ const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [signUpSuccess, setSignUpSuccess] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -27,7 +28,7 @@ const Auth = () => {
     } else {
       const { error } = await supabase.auth.signUp({ email, password });
       if (error) toast.error(error.message);
-      else toast.success("Check your email to confirm your account.");
+      else setSignUpSuccess(true);
     }
     setLoading(false);
   };
@@ -44,58 +45,98 @@ const Auth = () => {
         <div className="md:w-2/5 p-8 flex items-center justify-center">
           <Card className="w-full rounded-xl shadow-md">
             <div className="p-6">
-              <div className="text-center mb-6">
-                <div className="flex justify-center mb-3">
-                  <Zap className="h-8 w-8 text-accent" />
+              {signUpSuccess ? (
+                <div className="text-center space-y-4 py-4">
+                  <div className="flex justify-center">
+                    <Mail className="h-12 w-12 text-accent" />
+                  </div>
+                  <h2 className="font-serif text-xl font-bold text-foreground">
+                    Check your email
+                  </h2>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    We sent a confirmation link to{" "}
+                    <span className="font-medium text-foreground">{email}</span>
+                    .
+                    <br />
+                    Click the link in the email to activate your account.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Don't see it? Check your spam folder.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setSignUpSuccess(false);
+                      setIsLogin(true);
+                    }}
+                    className="text-sm text-accent hover:underline mt-2"
+                  >
+                    Back to sign in
+                  </button>
                 </div>
-                <h1 className="font-serif text-2xl font-bold text-foreground">
-                  ProngGSD
-                </h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {isLogin
-                    ? "Sign in to your learning engine"
-                    : "Create your account"}
-                </p>
-              </div>
-              <div className="space-y-4">
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@example.com"
-                      required
-                    />
+              ) : (
+                <>
+                  <div className="text-center mb-6">
+                    <div className="flex justify-center mb-3">
+                      <Zap className="h-8 w-8 text-accent" />
+                    </div>
+                    <h1 className="font-serif text-2xl font-bold text-foreground">
+                      ProngGSD
+                    </h1>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {isLogin
+                        ? "Sign in to your learning engine"
+                        : "Create your account"}
+                    </p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      required
-                      minLength={8}
-                    />
+                  <div className="space-y-4">
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="you@example.com"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="password">Password</Label>
+                        <Input
+                          id="password"
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          required
+                          minLength={8}
+                        />
+                      </div>
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={loading}
+                      >
+                        {loading
+                          ? "Loading..."
+                          : isLogin
+                            ? "Sign In"
+                            : "Sign Up"}
+                      </Button>
+                    </form>
+                    <button
+                      onClick={() => setIsLogin(!isLogin)}
+                      className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {isLogin
+                        ? "Don't have an account? Sign up"
+                        : "Already have an account? Sign in"}
+                    </button>
+                    {/* Demo mode hidden — old unit flow replaced by ProngGSD task tracker */}
                   </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? "Loading..." : isLogin ? "Sign In" : "Sign Up"}
-                  </Button>
-                </form>
-                <button
-                  onClick={() => setIsLogin(!isLogin)}
-                  className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {isLogin
-                    ? "Don't have an account? Sign up"
-                    : "Already have an account? Sign in"}
-                </button>
-                {/* Demo mode hidden — old unit flow replaced by ProngGSD task tracker */}
-              </div>
+                </>
+              )}
             </div>
           </Card>
         </div>
